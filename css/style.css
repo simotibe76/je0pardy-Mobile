@@ -1,0 +1,27 @@
+<style>
+        .neon-border { box-shadow: 0 0 25px rgba(250, 204, 21, 0.2); }
+        .neon-text {color: red !important;text-shadow: 0 0 25px red;
+}
+        .pulsing { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.01); opacity: 0.95; }
+        }
+
+        /* --- EFFETTI FUOCHI D'ARTIFICIO CSS --- */
+        @keyframes fwork {
+            0% { transform: scale(0); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 0.8; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+        .fwork-1 { background: radial-gradient(circle, #facc15 10%, #ef4444 40%, transparent 70%); animation: fwork 2.2s infinite ease-out; }
+        .fwork-2 { background: radial-gradient(circle, #3b82f6 10%, #a855f7 40%, transparent 70%); animation: fwork 2.8s infinite ease-out 0.7s; }
+        .fwork-3 { background: radial-gradient(circle, #22c55e 10%, #facc15 40%, transparent 70%); animation: fwork 1.9s infinite ease-out 1.3s; }
+        
+        @keyframes celebrate-pop {
+            0% { transform: scale(0.92); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: celebrate-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+    </style>

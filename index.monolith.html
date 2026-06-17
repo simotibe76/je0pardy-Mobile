@@ -9,7 +9,7 @@
     <script src="js/config.js"></script>
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 </head>
 <body class="min-h-screen bg-slate-950 text-white font-sans flex flex-col justify-between select-none">
 
@@ -17,6 +17,7 @@
 
 <div id="game-modal" class="fixed inset-0 bg-black/95 flex items-center justify-center p-4 hidden z-40">
     <div class="bg-slate-900 border-4 border-blue-500 p-8 rounded-3xl max-w-2xl w-full text-center shadow-2xl relative">
+        
         <div id="modal-loading" class="py-12">
             <div id="loading-spinner" class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-400 mx-auto mb-4"></div>
             <p id="loading-text" class="text-yellow-400 font-mono text-sm uppercase tracking-widest">Lancio della moneta 50/50...</p>
@@ -61,188 +62,30 @@
 
 <script>
 const app = document.getElementById('app');
-
-const SUPABASE_URL = "https://dtgitfiutlmymlgysovj.supabase.co"; 
-const SUPABASE_ANON_KEY = "sb_publishable_w688bWi3FPCUDEPHumsqPA_QAils40A";
-const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-const urlParams = new URLSearchParams(window.location.search);
-const currentRoomId = urlParams.get('room');
-let nomeGiocatoreLocale = sessionStorage.getItem("je0pardy_nome") || ""; 
-
 let players = [];
 let currentPlayerIndex = 0; 
 let gameBoardState = {}; 
-let averageAge = 40; 
-let realtimeChannel = null;
+let averageAge = 0; 
+
+
 
 const API_KEYS = typeof CONTENITORE_CHIAVI !== 'undefined' ? CONTENITORE_CHIAVI : [];
 let currentKeyIndex = 0; 
 
+
 let currentModelIndex = 0; 
+
+
+
 let currentActiveCell = null; 
-
-
-
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ==========================================
-// LOGICA CLOUD E SINCRONIZZAZIONE
-// ==========================================
-async function avviaSincronizzazioneInTempoReale() {
-    console.log("Avvio ascolto Realtime...");
-    
-    const { data, error } = await sbClient.from('stanze').select('*').eq('id', currentRoomId).single();
-    if (data) aggiornaStatoLocale(data);
-
-    if (!realtimeChannel) {
-        realtimeChannel = sbClient.channel('stanza_' + currentRoomId)
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'stanze', filter: 'id=eq.' + currentRoomId }, 
-            (payload) => { 
-                console.log("Database cambiato! Aggiorno la UI...");
-                aggiornaStatoLocale(payload.new); 
-            })
-            .subscribe();
-    }
-}
-
-function aggiornaStatoLocale(datiCloud) {
-    players = datiCloud.giocatori || [];
-    gameBoardState = datiCloud.stato_tabellone || {};
-    averageAge = datiCloud.eta_media || 40;
-    let indiceTurno = players.findIndex(p => p.name === datiCloud.turno_di);
-    currentPlayerIndex = indiceTurno !== -1 ? indiceTurno : 0;
-
-    if (datiCloud.fase_gioco === 'setup') {
-        renderLobbyAttesa();
-    } else if (datiCloud.fase_gioco === 'board') {
-        renderGameBoard();
-    }
-}
-
-function renderSetupScreen() {
-    if (!currentRoomId) {
-        // SCHERMATA CREATORE
-        app.innerHTML = `
-        <div class="w-full max-w-2xl bg-slate-900 border-4 border-yellow-500 p-8 rounded-3xl shadow-2xl text-center">
-            <h1 class="text-4xl font-black text-yellow-400 mb-6">JE0PARDY! CLOUD</h1>
-            <input id="creatore-nome" type="text" class="w-full p-3 mb-4 bg-slate-800 text-white rounded-xl text-center font-bold" placeholder="Il tuo nome" value="Master" />
-            <input id="creatore-eta" type="number" class="w-full p-3 mb-4 bg-slate-800 text-white rounded-xl text-center font-bold" placeholder="La tua età" />
-            <button onclick="creaNuovaStanzaCloud()" class="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-950 p-4 rounded-xl font-black uppercase transition">Crea Nuova Stanza</button>
-        </div>`;
-    } else if (currentRoomId && !nomeGiocatoreLocale) {
-        // SCHERMATA GUEST (CORRETTA)
-        app.innerHTML = `
-        <div class="w-full max-w-2xl bg-slate-900 border-4 border-blue-500 p-8 rounded-3xl shadow-2xl text-center">
-            <h1 class="text-4xl font-black text-blue-400 mb-6">UNISCITI ALLA STANZA</h1>
-            <input id="ospite-nome" type="text" class="w-full p-3 mb-4 bg-slate-800 text-white rounded-xl text-center font-bold" placeholder="Il tuo nome" />
-            <input id="ospite-eta" type="number" class="w-full p-3 mb-4 bg-slate-800 text-white rounded-xl text-center font-bold" placeholder="La tua età" />
-            <button onclick="uniscitiAStanzaCloud()" class="w-full bg-blue-500 hover:bg-blue-600 p-4 rounded-xl text-white font-black uppercase transition">Entra nel Gioco</button>
-        </div>`;
-    }
-}
-
-async function creaNuovaStanzaCloud() {
-    const nome = document.getElementById('creatore-nome').value.trim() || "Simone";
-    const eta = parseInt(document.getElementById('creatore-eta').value) || 40;
-    
-    nomeGiocatoreLocale = nome;
-    sessionStorage.setItem("je0pardy_nome", nome); 
-    
-    players = [{ name: nome, score: 0, correct: 0, wrong: 0, age: eta }];
-    
-    const { data, error } = await sbClient.from('stanze').insert([{
-        stato_tabellone: {}, 
-        giocatori: players, 
-        turno_di: nome, 
-        fase_gioco: 'setup',
-        eta_media: eta // Salviamo la media iniziale
-    }]).select();
-
-    if (!error) window.location.search = `?room=${data[0].id}`;
-}
-
-async function uniscitiAStanzaCloud() {
-    const nomeInput = document.getElementById('ospite-nome').value.trim();
-    const etaInput = parseInt(document.getElementById('ospite-eta').value);
-
-    if (!nomeInput || isNaN(etaInput)) {
-        alert("Inserisci nome ed età!");
-        return;
-    }
-
-    // 1. Recupero i dati della stanza da Supabase
-    const { data: stanzaData, error } = await sbClient
-        .from('stanze')
-        .select('giocatori')
-        .eq('id', currentRoomId)
-        .single();
-
-    if (error || !stanzaData) {
-        console.error("Errore nel recupero stanza:", error);
-        return;
-    }
-
-    // 2. Ora stanzaData esiste, procediamo
-    let giocatoriDB = stanzaData.giocatori || [];
-    
-    if (!giocatoriDB.find(p => p.name === nomeInput)) {
-        giocatoriDB.push({ name: nomeInput, score: 0, correct: 0, wrong: 0, age: etaInput });
-        
-        // Ricalcola media
-        const media = Math.round(giocatoriDB.reduce((sum, p) => sum + p.age, 0) / giocatoriDB.length);
-
-        await sbClient.from('stanze').update({ 
-            giocatori: giocatoriDB,
-            eta_media: media 
-        }).eq('id', currentRoomId);
-    }
-    
-    // 3. Salviamo in locale e avviamo
-    nomeGiocatoreLocale = nomeInput;
-    sessionStorage.setItem("je0pardy_nome", nomeInput); 
-    avviaSincronizzazioneInTempoReale();
-}
-
-function renderLobbyAttesa() {
-    const isCreatore = players.length > 0 && players[0].name === nomeGiocatoreLocale;
-    
-    const giocatoriHtml = players.map(p => `
-        <span class="px-4 py-2 bg-slate-800 border ${p.name === nomeGiocatoreLocale ? 'border-yellow-400 text-yellow-400' : 'border-slate-700 text-white'} rounded-full text-sm font-bold m-1 inline-block">
-            ${p.name}
-        </span>
-    `).join('');
-
-    app.innerHTML = `
-    <div class="w-full max-w-2xl bg-slate-900 border-4 border-green-500 p-8 rounded-3xl shadow-2xl text-center">
-        <h1 class="text-4xl font-black text-green-400 mb-2">LOBBY D'ATTESA</h1>
-        <p class="text-slate-400 mb-6 text-sm font-mono">ID: ${currentRoomId}</p>
-        
-        <div class="p-6 bg-slate-950 rounded-xl border border-slate-800 mb-8">
-            <p class="text-sm text-slate-400 mb-4 uppercase tracking-widest font-bold">Giocatori Connessi</p>
-            <div class="flex flex-wrap justify-center gap-2">${giocatoriHtml}</div>
-        </div>
-
-        ${isCreatore ? 
-            `<button onclick="avviaPartitaCloud()" class="w-full bg-yellow-400 hover:bg-yellow-500 p-4 rounded-xl text-slate-950 font-black uppercase transition text-xl shadow-lg animate-pulse">🚀 INIZIA PARTITA</button>` 
-            : 
-            `<div class="p-4 rounded-xl border border-blue-500/50 bg-blue-500/10 text-blue-400 font-bold animate-pulse">In attesa che il creatore avvii la partita... ⏳</div>`
-        }
-    </div>`;
-}
-
-async function avviaPartitaCloud() {
-    await sbClient.from('stanze').update({ fase_gioco: 'board' }).eq('id', currentRoomId);
-}
-
-// ==========================================
-// LOGICA DI GIOCO E AI (COMPLETA E INVARIATA)
-// ==========================================
 async function fetchAIWithRetry(prompt, attempt = 1) {
     if (API_KEYS.length === 0) {
         throw new Error("Nessuna chiave trovata nel file chiavi.js. Verifica il setup!");
     }
+
     const model = MODEL_CHAIN[currentModelIndex];
     const activeKey = API_KEYS[currentKeyIndex].trim(); 
     const statusExtra = document.getElementById('modal-status-extra');
@@ -301,10 +144,80 @@ async function fetchAIWithRetry(prompt, attempt = 1) {
     }
 }
 
+function renderSetupScreen() {
+    app.innerHTML = `
+    <div class="w-full max-w-2xl bg-slate-900 border-4 border-yellow-500 p-8 rounded-3xl shadow-2xl neon-border">
+        <h1 class="text-5xl font-black text-yellow-400 tracking-widest text-center uppercase neon-text mb-1">JE0PARDY!</h1>
+        <p class="text-slate-400 text-xs font-bold text-center uppercase tracking-widest mb-8">TARATURA AUTOMATICA SULL'ETÀ MEDIA DELLA SERATA</p>
+        
+        <div class="bg-slate-950/60 p-6 rounded-2xl border border-slate-800/80 mb-6">
+            <span class="block text-[11px] text-slate-400 font-extrabold uppercase tracking-wider mb-4">INSERISCI I PARTECIPANTI E LE LORO ETÀ</span>
+            
+            <div class="space-y-3.5">
+                <div class="grid grid-cols-4 gap-3">
+                    <input id="p1" type="text" class="col-span-3 p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-sm text-white font-bold focus:border-yellow-500 focus:outline-none transition" placeholder="Giocatore 1" value="Simone" />
+                    <input id="p1-age" type="number" class="p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-sm text-yellow-400 text-center font-bold focus:border-yellow-500 focus:outline-none transition" placeholder="Età" value="40" />
+                </div>
+                <div class="grid grid-cols-4 gap-3">
+                    <input id="p2" type="text" class="col-span-3 p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-sm text-white font-bold focus:border-yellow-500 focus:outline-none transition" placeholder="Giocatore 2" value="Ospite" />
+                    <input id="p2-age" type="number" class="p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-sm text-yellow-400 text-center font-bold focus:border-yellow-500 focus:outline-none transition" placeholder="Età" value="38" />
+                </div>
+                <div class="grid grid-cols-4 gap-3">
+                    <input id="p3" type="text" class="col-span-3 p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-sm text-white/50 font-medium focus:border-yellow-500 focus:outline-none transition" placeholder="Giocatore 3 (Opzionale)" />
+                    <input id="p3-age" type="number" class="p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-sm text-yellow-400/70 text-center font-bold focus:border-yellow-500 focus:outline-none transition" placeholder="Età" />
+                </div>
+                <div class="grid grid-cols-4 gap-3">
+                    <input id="p4" type="text" class="col-span-3 p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-sm text-white/50 font-medium focus:border-yellow-500 focus:outline-none transition" placeholder="Giocatore 4 (Opzionale)" />
+                    <input id="p4-age" type="number" class="p-3 bg-slate-900/90 border border-slate-800 rounded-xl text-sm text-yellow-400/70 text-center font-bold focus:border-yellow-500 focus:outline-none transition" placeholder="Età" />
+                </div>
+            </div>
+        </div>
+
+        <button id="btn-start" class="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black text-base py-4 rounded-xl uppercase tracking-wider transition shadow-lg pulsing">
+            GENERA TABELLONE CALIBRATO 🚀
+        </button>
+    </div>`;
+
+    document.getElementById('btn-start').addEventListener('click', handleGameStart);
+}
+
+function handleGameStart() {
+    players = [];
+    let totalAge = 0;
+    let countAge = 0;
+
+    for(let i = 1; i <= 4; i++) {
+        let name = document.getElementById("p" + i).value.trim();
+        let ageInput = document.getElementById("p" + i + "-age").value;
+        let age = parseInt(ageInput);
+        
+        if(name) {
+            if(!ageInput || isNaN(age)) {
+                alert("Inserisci l'età per il giocatore: " + name);
+                return;
+            }
+            // Aggiunto il tracciamento di risposte esatte (correct) ed errate (wrong)
+            players.push({ name: name, score: 0, correct: 0, wrong: 0 });
+            totalAge += age;
+            countAge++;
+        }
+    }
+
+    if(players.length === 0) {
+        alert("Inserisci almeno un giocatore per iniziare il match!");
+        return;
+    }
+
+    averageAge = Math.round(totalAge / countAge);
+    currentPlayerIndex = 0; 
+    gameBoardState = {}; 
+    renderGameBoard();
+}
+
 function renderGameBoard() {
     const numeroTotaleCelle = aiCategories.length * valoriTabellone.length;
     const celleCompletate = Object.keys(gameBoardState).length;
-    const isMyTurn = (players[currentPlayerIndex].name === nomeGiocatoreLocale);
+
     if (celleCompletate >= numeroTotaleCelle && numeroTotaleCelle > 0) {
         renderEndGameScreen();
         return;
@@ -325,27 +238,18 @@ function renderGameBoard() {
 
     let gridCells = '';
     valoriTabellone.forEach(val => {
-    aiCategories.forEach((cat, catIdx) => {
-        const cellId = catIdx + "-" + val;
-        if (gameBoardState[cellId]) {
-            gridCells += `<div class="bg-slate-950/80 border border-slate-900 flex items-center justify-center min-h-[55px] text-slate-700 font-bold text-sm">❌</div>`;
-        } else {
-            // Se NON è il mio turno, aggiungiamo 'opacity-50 cursor-not-allowed' e togliamo l'evento onclick
-            if (!isMyTurn) {
-                gridCells += `
-                <div class="bg-slate-800/20 border border-slate-800 text-slate-600 font-black text-xl flex items-center justify-center min-h-[55px] opacity-50 cursor-not-allowed">
-                    ${val}€
-                </div>`;
+        aiCategories.forEach((cat, catIdx) => {
+            const cellId = catIdx + "-" + val;
+            if (gameBoardState[cellId]) {
+                gridCells += `<div class="bg-slate-950/80 border border-slate-900 flex items-center justify-center min-h-[55px] text-slate-700 font-bold text-sm">❌</div>`;
             } else {
-                // Se è il mio turno, il bottone è attivo
                 gridCells += `
                 <button onclick="launchQuestion(${catIdx}, ${val})" class="bg-blue-950/40 border border-slate-800 hover:bg-blue-600 hover:text-white text-yellow-400 font-black text-xl tracking-wide transition duration-150 flex items-center justify-center min-h-[55px]">
                     ${val}€
                 </button>`;
             }
-        }
+        });
     });
-});
 
     app.innerHTML = `
     <div class="w-full space-y-6">
@@ -450,36 +354,25 @@ function revealAnswer() {
     document.getElementById('modal-turn-prompt').innerText = "🤔 " + activePlayerName + ", risposta esatta?";
 }
 
-async function resolveTurn(isCorrect) {
+function resolveTurn(isCorrect) {
     const val = currentActiveCell.value;
-    
-    // 1. Aggiorna stato locale
     if (isCorrect) { 
         players[currentPlayerIndex].score += val; 
-        players[currentPlayerIndex].correct++; 
+        players[currentPlayerIndex].correct++; // Incrementa risposte corrette
     } else { 
         players[currentPlayerIndex].score -= val; 
-        players[currentPlayerIndex].wrong++; 
+        players[currentPlayerIndex].wrong++; // Incrementa risposte errate
         currentPlayerIndex = (currentPlayerIndex + 1) % players.length; 
     }
     gameBoardState[currentActiveCell.id] = true;
-    
-    // 2. IMPORTANTE: Salva su Supabase per far scattare il Realtime!
-    await sbClient.from('stanze')
-        .update({ 
-            giocatori: players, 
-            stato_tabellone: gameBoardState,
-            turno_di: players[currentPlayerIndex].name // Passa il turno nel DB
-        })
-        .eq('id', currentRoomId);
-
-    // 3. Pulisci e chiudi
     currentActiveCell = null;
     document.getElementById('game-modal').classList.add('hidden');
     renderGameBoard();
 }
 
+// NUOVA SCHERMATA FINALE AD ALTO IMPATTO SCENICO
 function renderEndGameScreen() {
+    // Ordina la classifica finale basandosi sul punteggio più alto
     const sorted = [...players].sort((a, b) => b.score - a.score);
     const winner = sorted[0];
     
@@ -490,7 +383,7 @@ function renderEndGameScreen() {
                 <span class="font-black text-base uppercase ${idx === 0 ? 'text-yellow-400 font-black' : 'text-white'}">${p.name}</span>
                 <div class="text-[11px] text-slate-400 mt-1 flex gap-2">
                     <span>Esatte: <strong class="text-green-400 font-bold">${p.correct} ✅</strong></span>
-                    <span class="text-slate-700">-</span>
+                    <span class="text-slate-700">|</span>
                     <span>Errate: <strong class="text-red-400 font-bold">${p.wrong} ❌</strong></span>
                 </div>
             </div>
@@ -524,21 +417,14 @@ function renderEndGameScreen() {
                 </div>
             </div>
 
-            <button onclick="window.location.search=''" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black text-sm py-4 rounded-xl uppercase tracking-wider transition shadow-lg hover:scale-[1.01]">
-                🔄 TORNA ALLA SCHERMATA INIZIALE
+            <button onclick="renderSetupScreen()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black text-sm py-4 rounded-xl uppercase tracking-wider transition shadow-lg hover:scale-[1.01]">
+                🔄 RIAVVIA NUOVA CONFIGURAZIONE
             </button>
         </div>
     </div>`;
 }
 
-// ==========================================
-// AVVIO APPLICAZIONE (PUNTO DI INGRESSO)
-// ==========================================
-if (currentRoomId && nomeGiocatoreLocale) {
-    avviaSincronizzazioneInTempoReale();
-} else {
-    renderSetupScreen();
-}
+renderSetupScreen();
 </script>
 </body>
 </html>
