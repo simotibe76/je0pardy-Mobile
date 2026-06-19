@@ -1,133 +1,174 @@
 // js/game.js
 import { sbClient } from './api.js';
 
-// Esportiamo lo stato per renderlo accessibile ad altri moduli
-export let gameState = {
-    players: [],
-    currentPlayerIndex: 0,
-    boardState: {},
-    roomId: null
-};
+// ==========================================
+// STATO GLOBALE DEL GIOCO (Esportato per gli altri moduli)
+// ==========================================
+export const currentRoomId = new URLSearchParams(window.location.search).get('room');
+export let nomeGiocatoreLocale = sessionStorage.getItem("je0pardy_nome") || "";
+export let players = [];
+export let currentPlayerIndex = 0;
+export let gameBoardState = {};
+export let averageAge = 40;
+export let realtimeChannel = null;
+export let currentActiveCell = null; // Gestito dal modale
 
-// Funzione di aggiornamento stato (utile per evitare variabili globali sparse)
-export function updateLocalState(datiCloud, callback) {
-    gameState.players = datiCloud.giocatori || [];
-    gameState.boardState = datiCloud.stato_tabellone || {};
-    if (callback) callback(gameState);
+// Funzioni di utilità per aggiornare lo stato dall'esterno (es. dal modulo modal)
+export function setNomeGiocatoreLocale(val) { nomeGiocatoreLocale = val; }
+export function setCurrentActiveCell(val) { currentActiveCell = val; }
+
+// ==========================================
+// LOGICA DI SINCRONIZZAZIONE (DB & REALTIME)
+// ==========================================
+
+export function aggiornaStatoLocale(datiCloud, callback) {
+    players = datiCloud.giocatori || [];
+    gameBoardState = datiCloud.stato_tabellone || {};
+    averageAge = datiCloud.eta_media || 40;
+    let indiceTurno = players.findIndex(p => p.name === datiCloud.turno_di);
+    currentPlayerIndex = indiceTurno !== -1 ? indiceTurno : 0;
+
+    // Esegue il callback (passando la fase di gioco) per aggiornare la UI nel modulo main/ui
+    if (callback) callback(datiCloud.fase_gioco);
 }
 
 export async function avviaSincronizzazioneInTempoReale(roomId, callback) {
-    gameState.roomId = roomId;
+    console.log("DEBUG: [GAME MODULE] Avvio ascolto Realtime per la stanza:", roomId);
     
-    // Caricamento iniziale
+    // Caricamento iniziale dei dati della stanza
     const { data, error } = await sbClient.from('stanze').select('*').eq('id', roomId).single();
     if (data) {
-        updateLocalState(data, callback);
+        aggiornaStatoLocale(data, callback);
     }
 
-    // Sottoscrizione Realtime
-    return sbClient.channel('stanza_' + roomId)
-        .on('postgres_changes', { 
-            event: 'UPDATE', 
-            schema: 'public', 
-            table: 'stanze', 
-            filter: 'id=eq.' + roomId 
-        }, (payload) => {
-            updateLocalState(payload.new, callback);
-        })
-        .subscribe();
+    // Abbonamento al canale Realtime (Postgres Changes)
+    if (!realtimeChannel) {
+        realtimeChannel = sbClient.channel('stanza_' + roomId)
+            .on('postgres_changes', { 
+                event: 'UPDATE', 
+                schema: 'public', 
+                table: 'stanze', 
+                filter: 'id=eq.' + roomId 
+            }, (payload) => {
+                console.log("DEBUG: [GAME MODULE] Stato DB cambiato, sincronizzo...");
+                aggiornaStatoLocale(payload.new, callback);
+            })
+            .subscribe();
+    }
+    return realtimeChannel;
 }
 
 // ==========================================
-// FUNZIONI DI GESTIONE STANZA (Recuperate dal file originale)
+// FUNZIONI DI GESTIONE STANZA & TURNI
 // ==========================================
 
 export async function creaNuovaStanzaCloud() {
-    const nomeInput = document.getElementById('creatore-nome');
-    const etaInput = document.getElementById('creatore-eta');
+    const nomeInput = document.getElementById('creatore-nome').value.trim();
+    const etaInput = document.getElementById('creatore-eta').value;
+    const eta = parseInt(etaInput);
     
-    // 1. Recupero Dati (NESSUN FALLBACK A 40)
-    const nome = (nomeInput && nomeInput.value.trim() !== '') ? nomeInput.value.trim() : "Master";
-    const eta = etaInput ? parseInt(etaInput.value) : null;
-
-    // 2. Controllo Rigoroso
-    if (!eta || isNaN(eta) || eta <= 0) {
-        alert("Ehi Master, per calcolare l'età media devi inserire la tua età!");
-        etaInput.focus();
-        etaInput.style.borderColor = "red";
-        return; // BLOCCA L'ESECUZIONE
+    if (!nomeInput || isNaN(eta) || eta <= 0) {
+        alert("Attenzione: devi inserire un nome valido e un'età corretta per iniziare!");
+        return;
     }
     
-    // ... prosegui con la creazione su Supabase
-    nomeGiocatoreLocale = nome;
-    sessionStorage.setItem("je0pardy_nome", nome); 
+    nomeGiocatoreLocale = nomeInput;
+    sessionStorage.setItem("je0pardy_nome", nomeInput); 
     
-    players = [{ name: nome, score: 0, correct: 0, wrong: 0, age: eta }];
+    players = [{ name: nomeInput, score: 0, correct: 0, wrong: 0, age: eta }];
     
     const { data, error } = await sbClient.from('stanze').insert([{
         stato_tabellone: {}, 
         giocatori: players, 
-        turno_di: nome, 
+        turno_di: nomeInput, 
         fase_gioco: 'setup',
-        eta_media: eta
+        eta_media: eta 
     }]).select();
 
-    if (!error) window.location.search = `?room=${data[0].id}`;
-    else alert("Errore di connessione al database.");
+    if (!error) {
+        window.location.search = `?room=${data[0].id}`;
+    } else {
+        alert("Errore durante la creazione della stanza: " + error.message);
+    }
 }
+
 export async function uniscitiAStanzaCloud() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomId = urlParams.get('room');
-    
-    // Recupero elementi
-    const nomeEl = document.getElementById('ospite-nome');
-    const etaEl = document.getElementById('ospite-eta');
-    
-    const nomeInput = nomeEl ? nomeEl.value.trim() : "";
-    const etaInput = etaEl ? parseInt(etaEl.value) : null;
+    const nomeInput = document.getElementById('ospite-nome').value.trim();
+    const etaInput = parseInt(document.getElementById('ospite-eta').value);
 
-    // Validazione rigorosa: blocchiamo se il nome è vuoto o l'età non è un numero valido > 0
-    if (!nomeInput) {
-        alert("Inserisci un nome valido!");
-        return;
-    }
-    if (!etaInput || isNaN(etaInput) || etaInput <= 0) {
-        alert("Per favore, inserisci un'età valida!");
+    if (!nomeInput || isNaN(etaInput) || etaInput <= 0) {
+        alert("Inserisci nome ed età validi!");
         return;
     }
 
-    // Recupero dati stanza
-    const { data: stanzaData, error } = await sbClient.from('stanze').select('giocatori').eq('id', roomId).single();
-    
+    const { data: stanzaData, error } = await sbClient
+        .from('stanze')
+        .select('giocatori')
+        .eq('id', currentRoomId)
+        .single();
+
     if (error || !stanzaData) {
-        alert("Errore nel caricamento della stanza.");
+        alert("Errore nel recupero dati della stanza.");
         return;
     }
 
     let giocatoriDB = stanzaData.giocatori || [];
     
-    // Controlliamo che il nome non sia già preso
     if (!giocatoriDB.find(p => p.name === nomeInput)) {
         giocatoriDB.push({ name: nomeInput, score: 0, correct: 0, wrong: 0, age: etaInput });
         
-        // Calcolo media età aggiornato
+        // Ricalcola l'età media di tutti i partecipanti
         const media = Math.round(giocatoriDB.reduce((sum, p) => sum + p.age, 0) / giocatoriDB.length);
-        
-        const { error: updateError } = await sbClient
-            .from('stanze')
-            .update({ giocatori: giocatoriDB, eta_media: media })
-            .eq('id', roomId);
-            
+
+        const { error: updateError } = await sbClient.from('stanze').update({ 
+            giocatori: giocatoriDB,
+            eta_media: media 
+        }).eq('id', currentRoomId);
+
         if (updateError) {
-            console.error("Errore update DB:", updateError);
-            alert("Errore durante l'ingresso in stanza. Riprova.");
+            alert("Errore durante l'inserimento nella stanza.");
             return;
         }
     }
     
+    nomeGiocatoreLocale = nomeInput;
     sessionStorage.setItem("je0pardy_nome", nomeInput); 
-    window.location.reload(); 
+    window.location.reload();
 }
-// Esposizione globale per i bottoni HTML (Risolve l'errore is not a function)
+
+export async function avviaPartitaCloud() {
+    if (!currentRoomId) return;
+    await sbClient.from('stanze').update({ fase_gioco: 'board' }).eq('id', currentRoomId);
+}
+
+export async function resolveTurn(isCorrect) {
+    if (!currentActiveCell) return;
+    const val = currentActiveCell.value;
+    
+    if (isCorrect) { 
+        players[currentPlayerIndex].score += val; 
+        players[currentPlayerIndex].correct++; 
+    } else { 
+        players[currentPlayerIndex].score -= val; 
+        players[currentPlayerIndex].wrong++; 
+        currentPlayerIndex = (currentPlayerIndex + 1) % players.length; 
+    }
+    gameBoardState[currentActiveCell.id] = true;
+    
+    await sbClient.from('stanze')
+        .update({ 
+            giocatori: players, 
+            stato_tabellone: gameBoardState,
+            turno_di: players[currentPlayerIndex].name 
+        })
+        .eq('id', currentRoomId);
+
+    currentActiveCell = null;
+    document.getElementById('game-modal').classList.add('hidden');
+}
+
+// Exponiamo le funzioni a livello globale (window) per non rompere gli "onclick" presenti nei bottoni dell'HTML
 window.creaNuovaStanzaCloud = creaNuovaStanzaCloud;
 window.uniscitiAStanzaCloud = uniscitiAStanzaCloud;
+window.avviaPartitaCloud = avviaPartitaCloud;
+window.resolveTurn = resolveTurn;

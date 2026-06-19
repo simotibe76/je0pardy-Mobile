@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="module" src="js/ui.js"></script>
 </head>
 <body class="min-h-screen bg-slate-950 text-white font-sans flex flex-col justify-between select-none">
 
@@ -32,12 +33,12 @@
             <h2 id="modal-question" class="text-4xl font-extrabold mt-8 mb-10 leading-relaxed text-white"></h2>
             
             <div id="debug-tracer-zone" class="mb-6 p-3 bg-black/60 rounded-xl border border-dashed border-slate-800 text-left">
-                <span class="text-[9px] font-mono uppercase text-slate-500 block font-bold">Log di Sviluppo (Verrà tolto)</span>
+                <span class="text-[9px] font-mono uppercase text-slate-500 block font-bold">Log di Sviluppo</span>
                 <p id="debug-tracer-text" class="text-xs font-mono text-slate-300 mt-1 break-words"></p>
             </div>
 
             <div id="modal-action-zone" class="space-y-4">
-                <button onclick="revealAnswer()" class="bg-yellow-500 hover:bg-yellow-400 text-black font-black py-3 px-8 rounded-xl uppercase tracking-wider transition w-full">
+                <button onclick="window.revealAnswer()" class="bg-yellow-500 hover:bg-yellow-400 text-black font-black py-3 px-8 rounded-xl uppercase tracking-wider transition w-full">
                     Mostra Soluzione 👁️
                 </button>
             </div>
@@ -51,8 +52,8 @@
                 <p id="modal-turn-prompt" class="text-yellow-400 font-bold text-sm uppercase tracking-wide"></p>
                 
                 <div class="grid grid-cols-2 gap-4">
-                    <button onclick="resolveTurn(true)" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl uppercase">Indovinata! ✅</button>
-                    <button onclick="resolveTurn(false)" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl uppercase">Sbagliata! ❌</button>
+                    <button onclick="window.resolveTurn(true)" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl uppercase">Indovinata! ✅</button>
+                    <button onclick="window.resolveTurn(false)" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl uppercase">Sbagliata! ❌</button>
                 </div>
             </div>
         </div>
@@ -78,12 +79,14 @@ let realtimeChannel = null;
 
 const API_KEYS = typeof CONTENITORE_CHIAVI !== 'undefined' ? CONTENITORE_CHIAVI : [];
 let currentKeyIndex = 0; 
-
 let currentModelIndex = 0; 
 let currentActiveCell = null; 
 
-
-
+// Assicuriamoci che le configurazioni globali siano ancorate a window per i moduli esterni
+if (typeof aiCategories !== 'undefined') window.aiCategories = aiCategories;
+if (typeof valoriTabellone !== 'undefined') window.valoriTabellone = valoriTabellone;
+if (typeof DIFFICULTY_LEVELS !== 'undefined') window.DIFFICULTY_LEVELS = DIFFICULTY_LEVELS;
+if (typeof MODEL_CHAIN !== 'undefined') window.MODEL_CHAIN = MODEL_CHAIN;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -115,50 +118,28 @@ function aggiornaStatoLocale(datiCloud) {
     currentPlayerIndex = indiceTurno !== -1 ? indiceTurno : 0;
 
     if (datiCloud.fase_gioco === 'setup') {
-        renderLobbyAttesa();
+        if (typeof window.renderLobbyAttesa === 'function') {
+            window.renderLobbyAttesa(players, nomeGiocatoreLocale, currentRoomId);
+        }
     } else if (datiCloud.fase_gioco === 'board') {
-        renderGameBoard();
-    }
-}
-
-function renderSetupScreen() {
-    if (!currentRoomId) {
-        // SCHERMATA CREATORE
-        app.innerHTML = `
-        <div class="w-full max-w-2xl bg-slate-900 border-4 border-yellow-500 p-8 rounded-3xl shadow-2xl text-center">
-            <h1 class="text-4xl font-black text-yellow-400 mb-6">JE0PARDY! CLOUD</h1>
-            <input id="creatore-nome" type="text" class="w-full p-3 mb-4 bg-slate-800 text-white rounded-xl text-center font-bold" placeholder="Il tuo nome" value="Master" />
-            <input id="creatore-eta" type="number" class="w-full p-3 mb-4 bg-slate-800 text-white rounded-xl text-center font-bold" placeholder="La tua età" />
-            <button onclick="creaNuovaStanzaCloud()" class="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-950 p-4 rounded-xl font-black uppercase transition">Crea Nuova Stanza</button>
-        </div>`;
-    } else if (currentRoomId && !nomeGiocatoreLocale) {
-        // SCHERMATA GUEST (CORRETTA)
-        app.innerHTML = `
-        <div class="w-full max-w-2xl bg-slate-900 border-4 border-blue-500 p-8 rounded-3xl shadow-2xl text-center">
-            <h1 class="text-4xl font-black text-blue-400 mb-6">UNISCITI ALLA STANZA</h1>
-            <input id="ospite-nome" type="text" class="w-full p-3 mb-4 bg-slate-800 text-white rounded-xl text-center font-bold" placeholder="Il tuo nome" />
-            <input id="ospite-eta" type="number" class="w-full p-3 mb-4 bg-slate-800 text-white rounded-xl text-center font-bold" placeholder="La tua età" />
-            <button onclick="uniscitiAStanzaCloud()" class="w-full bg-blue-500 hover:bg-blue-600 p-4 rounded-xl text-white font-black uppercase transition">Entra nel Gioco</button>
-        </div>`;
+        if (typeof window.renderGameBoard === 'function') {
+            window.renderGameBoard(players, currentPlayerIndex, gameBoardState, averageAge, nomeGiocatoreLocale);
+        }
     }
 }
 
 async function creaNuovaStanzaCloud() {
     const nomeInput = document.getElementById('creatore-nome').value.trim();
     const etaInput = document.getElementById('creatore-eta').value;
-    
-    // 1. Validazione: il nome è vuoto o l'età non è un numero valido > 0?
     const eta = parseInt(etaInput);
     
     if (!nomeInput || isNaN(eta) || eta <= 0) {
         alert("Attenzione: devi inserire un nome valido e un'età corretta per iniziare!");
-        return; // <--- Questo è il muro: la funzione si ferma qui se i dati mancano
+        return;
     }
     
-    // 2. Se arriviamo qui, i dati sono validi
     nomeGiocatoreLocale = nomeInput;
     sessionStorage.setItem("je0pardy_nome", nomeInput); 
-    
     players = [{ name: nomeInput, score: 0, correct: 0, wrong: 0, age: eta }];
     
     const { data, error } = await sbClient.from('stanze').insert([{
@@ -175,6 +156,7 @@ async function creaNuovaStanzaCloud() {
         alert("Errore durante la creazione della stanza: " + error.message);
     }
 }
+
 async function uniscitiAStanzaCloud() {
     const nomeInput = document.getElementById('ospite-nome').value.trim();
     const etaInput = parseInt(document.getElementById('ospite-eta').value);
@@ -184,7 +166,6 @@ async function uniscitiAStanzaCloud() {
         return;
     }
 
-    // 1. Recupero i dati della stanza da Supabase
     const { data: stanzaData, error } = await sbClient
         .from('stanze')
         .select('giocatori')
@@ -196,13 +177,10 @@ async function uniscitiAStanzaCloud() {
         return;
     }
 
-    // 2. Ora stanzaData esiste, procediamo
     let giocatoriDB = stanzaData.giocatori || [];
     
     if (!giocatoriDB.find(p => p.name === nomeInput)) {
         giocatoriDB.push({ name: nomeInput, score: 0, correct: 0, wrong: 0, age: etaInput });
-        
-        // Ricalcola media
         const media = Math.round(giocatoriDB.reduce((sum, p) => sum + p.age, 0) / giocatoriDB.length);
 
         await sbClient.from('stanze').update({ 
@@ -211,37 +189,9 @@ async function uniscitiAStanzaCloud() {
         }).eq('id', currentRoomId);
     }
     
-    // 3. Salviamo in locale e avviamo
     nomeGiocatoreLocale = nomeInput;
     sessionStorage.setItem("je0pardy_nome", nomeInput); 
     avviaSincronizzazioneInTempoReale();
-}
-
-function renderLobbyAttesa() {
-    const isCreatore = players.length > 0 && players[0].name === nomeGiocatoreLocale;
-    
-    const giocatoriHtml = players.map(p => `
-        <span class="px-4 py-2 bg-slate-800 border ${p.name === nomeGiocatoreLocale ? 'border-yellow-400 text-yellow-400' : 'border-slate-700 text-white'} rounded-full text-sm font-bold m-1 inline-block">
-            ${p.name}
-        </span>
-    `).join('');
-
-    app.innerHTML = `
-    <div class="w-full max-w-2xl bg-slate-900 border-4 border-green-500 p-8 rounded-3xl shadow-2xl text-center">
-        <h1 class="text-4xl font-black text-green-400 mb-2">LOBBY D'ATTESA</h1>
-        <p class="text-slate-400 mb-6 text-sm font-mono">ID: ${currentRoomId}</p>
-        
-        <div class="p-6 bg-slate-950 rounded-xl border border-slate-800 mb-8">
-            <p class="text-sm text-slate-400 mb-4 uppercase tracking-widest font-bold">Giocatori Connessi</p>
-            <div class="flex flex-wrap justify-center gap-2">${giocatoriHtml}</div>
-        </div>
-
-        ${isCreatore ? 
-            `<button onclick="avviaPartitaCloud()" class="w-full bg-yellow-400 hover:bg-yellow-500 p-4 rounded-xl text-slate-950 font-black uppercase transition text-xl shadow-lg animate-pulse">🚀 INIZIA PARTITA</button>` 
-            : 
-            `<div class="p-4 rounded-xl border border-blue-500/50 bg-blue-500/10 text-blue-400 font-bold animate-pulse">In attesa che il creatore avvii la partita... ⏳</div>`
-        }
-    </div>`;
 }
 
 async function avviaPartitaCloud() {
@@ -249,13 +199,14 @@ async function avviaPartitaCloud() {
 }
 
 // ==========================================
-// LOGICA DI GIOCO E AI (COMPLETA E INVARIATA)
+// LOGICA DI GIOCO E INTRECCIO AI
 // ==========================================
 async function fetchAIWithRetry(prompt, attempt = 1) {
     if (API_KEYS.length === 0) {
-        throw new Error("Nessuna chiave trovata nel file chiavi.js. Verifica il setup!");
+        throw new Error("Nessuna chiave trovata nel file chiavi.js.");
     }
-    const model = MODEL_CHAIN[currentModelIndex];
+    const currentModelChain = window.MODEL_CHAIN || MODEL_CHAIN;
+    const model = currentModelChain[currentModelIndex];
     const activeKey = API_KEYS[currentKeyIndex].trim(); 
     const statusExtra = document.getElementById('modal-status-extra');
     
@@ -278,11 +229,10 @@ async function fetchAIWithRetry(prompt, attempt = 1) {
         });
 
         if (response.status === 429 || response.status === 503) {
-            console.warn(`[RETRY] HTTP ${response.status}. Cambio slot chiave...`);
             await sleep(300);
             currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
             if (attempt < 3) {
-                currentModelIndex = (currentModelIndex + 1) % MODEL_CHAIN.length;
+                currentModelIndex = (currentModelIndex + 1) % currentModelChain.length;
                 return await fetchAIWithRetry(prompt, attempt + 1); 
             }
         }
@@ -292,8 +242,7 @@ async function fetchAIWithRetry(prompt, attempt = 1) {
             throw new Error(`Codice HTTP ${response.status} - ${errorDetails}`);
         }
 
-        currentModelIndex = (currentModelIndex + 1) % MODEL_CHAIN.length;
-
+        currentModelIndex = (currentModelIndex + 1) % currentModelChain.length;
         const data = await response.json();
         let rawText = data.candidates[0].content.parts[0].text.trim();
         if (rawText.startsWith("```")) {
@@ -302,85 +251,19 @@ async function fetchAIWithRetry(prompt, attempt = 1) {
         return JSON.parse(rawText);
 
     } catch (err) {
-        console.error("Tentativo " + attempt + " fallito:", err);
         if (attempt < 3) {
             await sleep(300);
             currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
-            currentModelIndex = (currentModelIndex + 1) % MODEL_CHAIN.length;
+            currentModelIndex = (currentModelIndex + 1) % currentModelChain.length;
             return await fetchAIWithRetry(prompt, attempt + 1);
         }
         throw err;
     }
 }
 
-function renderGameBoard() {
-    const numeroTotaleCelle = aiCategories.length * valoriTabellone.length;
-    const celleCompletate = Object.keys(gameBoardState).length;
-    const isMyTurn = (players[currentPlayerIndex].name === nomeGiocatoreLocale);
-    if (celleCompletate >= numeroTotaleCelle && numeroTotaleCelle > 0) {
-        renderEndGameScreen();
-        return;
-    }
-
-    let playersHtml = players.map((p, idx) => `
-        <div class="flex flex-col items-center p-3 rounded-2xl border-2 transition-all ${idx === currentPlayerIndex ? 'border-yellow-400 bg-yellow-400/10 shadow-lg scale-105' : 'border-slate-800 bg-slate-900/40'}">
-            <span class="text-xs font-bold uppercase tracking-wider ${idx === currentPlayerIndex ? 'text-yellow-400' : 'text-slate-400'}">${p.name}</span>
-            <span class="text-2xl font-black mt-1 ${p.score >= 0 ? 'text-green-400' : 'text-red-400'}">${p.score} €</span>
-        </div>
-    `).join('');
-
-    let gridHeaders = aiCategories.map(cat => `
-        <div class="bg-slate-900 border border-slate-800 p-2 text-center flex items-center justify-center min-h-[60px] rounded-t-lg">
-            <span class="text-sm font-black uppercase text-blue-400 tracking-wide">${cat}</span>
-        </div>
-    `).join('');
-
-    let gridCells = '';
-    valoriTabellone.forEach(val => {
-    aiCategories.forEach((cat, catIdx) => {
-        const cellId = catIdx + "-" + val;
-        if (gameBoardState[cellId]) {
-            gridCells += `<div class="bg-slate-950/80 border border-slate-900 flex items-center justify-center min-h-[55px] text-slate-700 font-bold text-sm">❌</div>`;
-        } else {
-            // Se NON è il mio turno, aggiungiamo 'opacity-50 cursor-not-allowed' e togliamo l'evento onclick
-            if (!isMyTurn) {
-                gridCells += `
-                <div class="bg-slate-800/20 border border-slate-800 text-slate-600 font-black text-xl flex items-center justify-center min-h-[55px] opacity-50 cursor-not-allowed">
-                    ${val}€
-                </div>`;
-            } else {
-                // Se è il mio turno, il bottone è attivo
-                gridCells += `
-                <button onclick="launchQuestion(${catIdx}, ${val})" class="bg-blue-950/40 border border-slate-800 hover:bg-blue-600 hover:text-white text-yellow-400 font-black text-xl tracking-wide transition duration-150 flex items-center justify-center min-h-[55px]">
-                    ${val}€
-                </button>`;
-            }
-        }
-    });
-});
-
-    app.innerHTML = `
-    <div class="w-full space-y-6">
-        <div class="flex flex-col md:flex-row justify-between items-center bg-slate-900/80 p-4 rounded-2xl border border-slate-800 gap-4">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 flex-grow w-full">
-                ${playersHtml}
-            </div>
-            <div class="bg-blue-950/30 border border-blue-500/20 px-4 py-3 rounded-xl text-center md:text-right shrink-0">
-                <span class="text-sm font-bold text-blue-400">Età Media: ${averageAge} anni</span>
-            </div>
-        </div>
-
-        <div class="overflow-x-auto bg-slate-900/30 p-2 rounded-2xl border border-slate-800/50">
-            <div class="grid grid-cols-10 gap-1 min-w-[1000px]">
-                ${gridHeaders}
-                ${gridCells}
-            </div>
-        </div>
-    </div>`;
-}
-
 async function launchQuestion(catIdx, val) {
-    const category = aiCategories[catIdx];
+    const currentCategories = window.aiCategories || aiCategories;
+    const category = currentCategories[catIdx];
     currentActiveCell = { id: catIdx + "-" + val, category: category, value: val };
 
     document.getElementById('modal-status-extra').innerText = "";
@@ -403,15 +286,12 @@ async function launchQuestion(catIdx, val) {
         document.getElementById('modal-badge-source').innerText = badgeText;
         
         const badgeElement = document.getElementById('modal-badge-source');
-        if(isRealError) {
-            badgeElement.className = "text-xs px-3 py-1 bg-red-500/20 text-red-400 rounded-full font-bold uppercase border border-red-500/30";
-        } else {
-            badgeElement.className = "text-xs px-3 py-1 bg-green-500/20 text-green-400 rounded-full font-bold uppercase border border-green-500/30";
-        }
+        badgeElement.className = isRealError 
+            ? "text-xs px-3 py-1 bg-red-500/20 text-red-400 rounded-full font-bold uppercase border border-red-500/30"
+            : "text-xs px-3 py-1 bg-green-500/20 text-green-400 rounded-full font-bold uppercase border border-green-500/30";
         
         document.getElementById('modal-question').innerText = qText;
         document.getElementById('modal-answer').innerText = aText;
-        
         document.getElementById('debug-tracer-text').innerHTML = `Sorgente: <strong class="${isRealError ? 'text-red-400' : 'text-green-400'}">${badgeText}</strong><br>Motivo: ${reasonMessage}`;
 
         document.getElementById('modal-loading').classList.add('hidden');
@@ -422,17 +302,17 @@ async function launchQuestion(catIdx, val) {
 
     if (coinFlip >= 0.5) {
         await sleep(300); 
-        useLocalFallback(`La moneta (Moneta >= 0.5) ha estratto l'esecuzione offline istantanea.`, "[DATABASE LOCALE]", false);
+        useLocalFallback(`La moneta (${coinFlip.toFixed(2)} >= 0.5) ha estratto l'esecuzione offline istantanea.`, "[DATABASE LOCALE]", false);
     } else {
         document.getElementById('loading-text').innerText = "Interrogazione API Gemini...";
-
-        const config = DIFFICULTY_LEVELS[val];
-        const promptDomanda = "Sei l'autore senior del quiz Je0pardy!. Genera una singola domanda in italiano per la categoria: \"" + category + "\".\n" +
-        "Valore: €" + val + ". Difficoltà richiesta per la casella: livello " + config.level + "/5 (" + config.desc + ")." +
-        "\n\nREGOLA DI BILANCIAMENTO GENERALE:\nTutte le domande devono essere tarate sulla cultura e competenze tipiche di persone con un'ETÀ MEDIA DI " + averageAge + " ANNI." +
-        "\n\nL'indizio deve essere una affermazione di massimo 12 parole. La risposta deve essere secca (1-3 parole)." +
-        "\nRispondi esclusivamente in formato JSON, senza markdown:\n" +
-        "{ \"question\": \"Testo indizio\", \"answer\": \"Risposta\" }";
+        const currentDiff = window.DIFFICULTY_LEVELS || DIFFICULTY_LEVELS;
+        const config = currentDiff[val];
+        const promptDomanda = `Sei l'autore senior del quiz Je0pardy!. Genera una singola domanda in italiano per la categoria: "${category}".\n` +
+        `Valore: €${val}. Difficoltà richiesta per la casella: livello ${config.level}/5 (${config.desc}).` +
+        `\n\nREGOLA DI BILANCIAMENTO GENERALE:\nTutte le domande devono essere tarate sulla cultura e competenze tipiche di persone con un'ETÀ MEDIA DI ${averageAge} ANNI.` +
+        `\n\nL'indizio deve essere una affermazione di massimo 12 parole. La risposta deve essere secca (1-3 parole).` +
+        `\nRispondi esclusivamente in formato JSON, senza markdown:\n` +
+        `{ "question": "Testo indizio", "answer": "Risposta" }`;
 
         try {
             const parsed = await fetchAIWithRetry(promptDomanda);
@@ -443,8 +323,7 @@ async function launchQuestion(catIdx, val) {
             
             document.getElementById('modal-question').innerText = parsed.question || parsed.q;
             document.getElementById('modal-answer').innerText = parsed.answer || parsed.a;
-            
-            document.getElementById('debug-tracer-text').innerHTML = `Sorgente: <strong class="text-purple-400">[LIVE AI VIA API]</strong><br>Motivo: Risposta generata in tempo reale dai server remoti con successo.`;
+            document.getElementById('debug-tracer-text').innerHTML = `Sorgente: <strong class="text-purple-400">[LIVE AI VIA API]</strong><br>Motivo: Risposta generata in tempo reale con successo.`;
 
             document.getElementById('modal-loading').classList.add('hidden');
             document.getElementById('modal-content').classList.remove('hidden');
@@ -465,7 +344,6 @@ function revealAnswer() {
 async function resolveTurn(isCorrect) {
     const val = currentActiveCell.value;
     
-    // 1. Aggiorna stato locale
     if (isCorrect) { 
         players[currentPlayerIndex].score += val; 
         players[currentPlayerIndex].correct++; 
@@ -476,72 +354,28 @@ async function resolveTurn(isCorrect) {
     }
     gameBoardState[currentActiveCell.id] = true;
     
-    // 2. IMPORTANTE: Salva su Supabase per far scattare il Realtime!
     await sbClient.from('stanze')
         .update({ 
             giocatori: players, 
             stato_tabellone: gameBoardState,
-            turno_di: players[currentPlayerIndex].name // Passa il turno nel DB
+            turno_di: players[currentPlayerIndex].name
         })
         .eq('id', currentRoomId);
 
-    // 3. Pulisci e chiudi
     currentActiveCell = null;
     document.getElementById('game-modal').classList.add('hidden');
-    renderGameBoard();
+    if (typeof window.renderGameBoard === 'function') {
+        window.renderGameBoard(players, currentPlayerIndex, gameBoardState, averageAge, nomeGiocatoreLocale);
+    }
 }
 
-function renderEndGameScreen() {
-    const sorted = [...players].sort((a, b) => b.score - a.score);
-    const winner = sorted[0];
-    
-    let leaderboardHtml = sorted.map((p, idx) => `
-        <div class="bg-slate-950/80 border ${idx === 0 ? 'border-yellow-400 shadow-md shadow-yellow-400/10' : 'border-slate-800'} p-4 rounded-2xl flex justify-between items-center transition-all">
-            <div class="text-left">
-                <span class="font-bold text-xs text-slate-500 mr-1.5">#${idx + 1}</span>
-                <span class="font-black text-base uppercase ${idx === 0 ? 'text-yellow-400 font-black' : 'text-white'}">${p.name}</span>
-                <div class="text-[11px] text-slate-400 mt-1 flex gap-2">
-                    <span>Esatte: <strong class="text-green-400 font-bold">${p.correct} ✅</strong></span>
-                    <span class="text-slate-700">-</span>
-                    <span>Errate: <strong class="text-red-400 font-bold">${p.wrong} ❌</strong></span>
-                </div>
-            </div>
-            <div class="text-xl font-black ${p.score >= 0 ? 'text-green-400' : 'text-red-400'}">
-                ${p.score} €
-            </div>
-        </div>
-    `).join('');
-
-    app.innerHTML = `
-    <div class="relative w-full max-w-xl bg-slate-900 border-4 border-yellow-500 p-8 rounded-3xl shadow-2xl neon-border text-center overflow-hidden animate-pop">
-        
-        <div class="absolute inset-0 pointer-events-none z-0 opacity-40">
-            <div class="absolute top-8 left-12 w-36 h-36 rounded-full fwork-1"></div>
-            <div class="absolute top-28 right-10 w-44 h-44 rounded-full fwork-2"></div>
-            <div class="absolute bottom-10 left-1/4 w-40 h-40 rounded-full fwork-3"></div>
-        </div>
-
-        <div class="relative z-10 space-y-6">
-            <div>
-                <span class="text-xs font-black text-yellow-400 uppercase tracking-widest block mb-1">✨ MATCH COMPLETATO ✨</span>
-                <h1 class="text-3xl font-black text-white tracking-wide uppercase">CLASSIFICA FINALE</h1>
-            </div>
-
-            <div class="p-6 bg-slate-950/50 rounded-2xl border border-slate-800/80 backdrop-blur-sm">
-                <span class="text-[10px] text-slate-500 uppercase tracking-wider block font-bold mb-1">👑 CAMPIONE ASSOLUTO 👑</span>
-                <h2 class="text-4xl font-black text-yellow-400 uppercase tracking-widest neon-text mb-6 animate-pulse">${winner.name}</h2>
-                
-                <div class="space-y-3">
-                    ${leaderboardHtml}
-                </div>
-            </div>
-
-            <button onclick="window.location.search=''" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black text-sm py-4 rounded-xl uppercase tracking-wider transition shadow-lg hover:scale-[1.01]">
-                🔄 TORNA ALLA SCHERMATA INIZIALE
-            </button>
-        </div>
-    </div>`;
-}
+// Ancoraggio logiche di gioco al ciclo window per renderle chiamabili dall'esterno
+window.creaNuovaStanzaCloud = creaNuovaStanzaCloud;
+window.uniscitiAStanzaCloud = uniscitiAStanzaCloud;
+window.avviaPartitaCloud = avviaPartitaCloud;
+window.launchQuestion = launchQuestion;
+window.revealAnswer = revealAnswer;
+window.resolveTurn = resolveTurn;
 
 // ==========================================
 // AVVIO APPLICAZIONE (PUNTO DI INGRESSO)
@@ -549,7 +383,11 @@ function renderEndGameScreen() {
 if (currentRoomId && nomeGiocatoreLocale) {
     avviaSincronizzazioneInTempoReale();
 } else {
-    renderSetupScreen();
+    setTimeout(() => {
+        if (typeof window.renderSetupScreen === 'function') {
+            window.renderSetupScreen(currentRoomId, nomeGiocatoreLocale);
+        }
+    }, 100);
 }
 </script>
 </body>

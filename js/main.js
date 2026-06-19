@@ -1,4 +1,5 @@
 // js/main.js
+console.log("DEBUG: main.js caricato correttamente");
 import { avviaSincronizzazioneInTempoReale } from './game.js';
 import { renderSetupScreen } from './ui.js';
 import * as modals from './modal.js'; // Importiamo i modali
