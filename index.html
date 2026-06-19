@@ -144,25 +144,37 @@ function renderSetupScreen() {
 }
 
 async function creaNuovaStanzaCloud() {
-    const nome = document.getElementById('creatore-nome').value.trim() || "Simone";
-    const eta = parseInt(document.getElementById('creatore-eta').value) || 40;
+    const nomeInput = document.getElementById('creatore-nome').value.trim();
+    const etaInput = document.getElementById('creatore-eta').value;
     
-    nomeGiocatoreLocale = nome;
-    sessionStorage.setItem("je0pardy_nome", nome); 
+    // 1. Validazione: il nome è vuoto o l'età non è un numero valido > 0?
+    const eta = parseInt(etaInput);
     
-    players = [{ name: nome, score: 0, correct: 0, wrong: 0, age: eta }];
+    if (!nomeInput || isNaN(eta) || eta <= 0) {
+        alert("Attenzione: devi inserire un nome valido e un'età corretta per iniziare!");
+        return; // <--- Questo è il muro: la funzione si ferma qui se i dati mancano
+    }
+    
+    // 2. Se arriviamo qui, i dati sono validi
+    nomeGiocatoreLocale = nomeInput;
+    sessionStorage.setItem("je0pardy_nome", nomeInput); 
+    
+    players = [{ name: nomeInput, score: 0, correct: 0, wrong: 0, age: eta }];
     
     const { data, error } = await sbClient.from('stanze').insert([{
         stato_tabellone: {}, 
         giocatori: players, 
-        turno_di: nome, 
+        turno_di: nomeInput, 
         fase_gioco: 'setup',
-        eta_media: eta // Salviamo la media iniziale
+        eta_media: eta 
     }]).select();
 
-    if (!error) window.location.search = `?room=${data[0].id}`;
+    if (!error) {
+        window.location.search = `?room=${data[0].id}`;
+    } else {
+        alert("Errore durante la creazione della stanza: " + error.message);
+    }
 }
-
 async function uniscitiAStanzaCloud() {
     const nomeInput = document.getElementById('ospite-nome').value.trim();
     const etaInput = parseInt(document.getElementById('ospite-eta').value);
