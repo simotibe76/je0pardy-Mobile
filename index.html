@@ -273,13 +273,24 @@ async function launchQuestion(catIdx, val) {
     document.getElementById('modal-action-zone').classList.remove('hidden');
     document.getElementById('game-modal').classList.remove('hidden');
 
+    // Modificata per supportare sia oggetti singoli che array di domande
     function useLocalFallback(reasonMessage, badgeText, isRealError = false) {
         let qText = "Indizio di riserva non trovato.";
         let aText = "N/D";
         
         if (BACKUP_TRIVIA[category] && BACKUP_TRIVIA[category][val]) {
-            qText = BACKUP_TRIVIA[category][val].q;
-            aText = BACKUP_TRIVIA[category][val].a;
+            const entry = BACKUP_TRIVIA[category][val];
+            
+            if (Array.isArray(entry)) {
+                // Se c'è un array di domande, ne estrae una a caso per non ripetersi
+                const randomIdx = Math.floor(Math.random() * entry.length);
+                qText = entry[randomIdx].q;
+                aText = entry[randomIdx].a;
+            } else {
+                // Se è un oggetto singolo vecchio stile, lo usa direttamente
+                qText = entry.q;
+                aText = entry.a;
+            }
         }
 
         document.getElementById('modal-badge-cat').innerText = category + " • €" + val;
@@ -300,9 +311,10 @@ async function launchQuestion(catIdx, val) {
 
     const coinFlip = Math.random();
 
-    if (coinFlip >= 0.5) {
+    // SOGLIA PORTATA A 0.8: Ora l'AI si attiva l'80% delle volte (quando coinFlip è < 0.8)
+    if (coinFlip >= 0.8) {
         await sleep(300); 
-        useLocalFallback(`La moneta (${coinFlip.toFixed(2)} >= 0.5) ha estratto l'esecuzione offline istantanea.`, "[DATABASE LOCALE]", false);
+        useLocalFallback(`La moneta (${coinFlip.toFixed(2)} >= 0.8) ha estratto l'esecuzione offline istantanea.`, "[DATABASE LOCALE]", false);
     } else {
         document.getElementById('loading-text').innerText = "Interrogazione API Gemini...";
         const currentDiff = window.DIFFICULTY_LEVELS || DIFFICULTY_LEVELS;
