@@ -4,3 +4,7 @@ js/chiavi.js
 # Node / environment
 node_modules/
 .DS_Store
+
+# Local screenshots and temporary images
+*Screenshot*.png
+*Schermata*.png
