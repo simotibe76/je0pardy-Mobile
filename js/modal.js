@@ -49,8 +49,9 @@ export async function launchQuestion(catIdx, val) {
         
         const backupTrivia = window.BACKUP_TRIVIA || {};
         if (backupTrivia[category] && backupTrivia[category][val]) {
-            qText = backupTrivia[category][val].q;
-            aText = backupTrivia[category][val].a;
+            const item = Array.isArray(backupTrivia[category][val]) ? backupTrivia[category][val][0] : backupTrivia[category][val];
+            qText = item?.q || qText;
+            aText = item?.a || aText;
         }
 
         document.getElementById('modal-badge-cat').innerText = category + " • €" + val;
@@ -65,6 +66,7 @@ export async function launchQuestion(catIdx, val) {
         
         document.getElementById('modal-question').innerText = qText;
         document.getElementById('modal-answer').innerText = aText;
+        document.getElementById('modal-answer').classList.remove('hidden');
         
         const debugTracer = document.getElementById('debug-tracer-text');
         if (debugTracer) {
@@ -112,6 +114,7 @@ export async function launchQuestion(catIdx, val) {
             
             document.getElementById('modal-question').innerText = parsed.question || parsed.q;
             document.getElementById('modal-answer').innerText = parsed.answer || parsed.a;
+            document.getElementById('modal-answer').classList.remove('hidden');
             
             const debugTracer = document.getElementById('debug-tracer-text');
             if (debugTracer) {
@@ -133,6 +136,7 @@ export async function launchQuestion(catIdx, val) {
 export function revealAnswer() {
     document.getElementById('modal-action-zone').classList.add('hidden');
     document.getElementById('modal-resolution-zone').classList.remove('hidden');
+    document.getElementById('modal-answer').classList.remove('hidden');
     
     const activePlayerName = players[currentPlayerIndex]?.name || "Giocatore";
     document.getElementById('modal-turn-prompt').innerText = "🤔 " + activePlayerName + ", risposta esatta?";
