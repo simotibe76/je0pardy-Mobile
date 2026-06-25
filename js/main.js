@@ -10,18 +10,23 @@ window.addEventListener('DOMContentLoaded', () => {
     const roomId = urlParams.get('room');
     const nome = sessionStorage.getItem("je0pardy_nome");
 
-    if (roomId && nome) {
+    if (roomId) {
         renderLoadingScreen();
-        avviaSincronizzazioneInTempoReale(roomId, (fase) => {
-            console.log("DEBUG: [MAIN] Rendering fase di gioco:", fase);
+        avviaSincronizzazioneInTempoReale(roomId, (fase, stanzaData) => {
+            console.log("DEBUG: [MAIN] Rendering fase di gioco:", fase, "nome sessione:", nome);
+            const isRoomPlayerKnown = nome && stanzaData?.giocatori?.some(p => p.name === nome);
+
+            if (!nome || !isRoomPlayerKnown) {
+                renderSetupScreen(roomId);
+                return;
+            }
+
             if (fase === 'board') {
                 renderGameBoard(players, currentPlayerIndex, gameBoardState, averageAge, nomeGiocatoreLocale);
             } else {
                 renderLobbyAttesa(players, nomeGiocatoreLocale, roomId);
             }
         });
-    } else if (roomId) {
-        renderSetupScreen(roomId);
     } else {
         renderSetupScreen();
     }

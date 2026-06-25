@@ -21,15 +21,12 @@ export function setCurrentActiveCell(val) { currentActiveCell = val; }
 // LOGICA DI SINCRONIZZAZIONE (DB & REALTIME)
 // ==========================================
 
-export function aggiornaStatoLocale(datiCloud, callback) {
+export function aggiornaStatoLocale(datiCloud) {
     players = datiCloud.giocatori || [];
     gameBoardState = datiCloud.stato_tabellone || {};
     averageAge = datiCloud.eta_media || 40;
     let indiceTurno = players.findIndex(p => p.name === datiCloud.turno_di);
     currentPlayerIndex = indiceTurno !== -1 ? indiceTurno : 0;
-
-    // Esegue il callback (passando la fase di gioco) per aggiornare la UI nel modulo main/ui
-    if (callback) callback(datiCloud.fase_gioco);
 }
 
 export async function avviaSincronizzazioneInTempoReale(roomId, callback) {
@@ -39,16 +36,17 @@ export async function avviaSincronizzazioneInTempoReale(roomId, callback) {
     const { data, error } = await sbClient.from('stanze').select('*').eq('id', roomId).single();
     if (error) {
         console.error("DEBUG: [GAME MODULE] Errore caricamento stanza iniziale:", error);
-        if (callback) callback('setup');
+        if (callback) callback('setup', null);
         return null;
     }
 
     if (data) {
         console.log("DEBUG: [GAME MODULE] Dati stanza iniziali caricati", data);
-        aggiornaStatoLocale(data, callback);
+        aggiornaStatoLocale(data);
+        if (callback) callback(data.fase_gioco, data);
     } else {
         console.warn("DEBUG: [GAME MODULE] Nessun dato stanza trovato per roomId:", roomId);
-        if (callback) callback('setup');
+        if (callback) callback('setup', null);
     }
 
     // Abbonamento al canale Realtime (Postgres Changes)
@@ -61,7 +59,8 @@ export async function avviaSincronizzazioneInTempoReale(roomId, callback) {
                 filter: 'id=eq.' + roomId 
             }, (payload) => {
                 console.log("DEBUG: [GAME MODULE] Stato DB cambiato, sincronizzo...");
-                aggiornaStatoLocale(payload.new, callback);
+                aggiornaStatoLocale(payload.new);
+                if (callback) callback(payload.new.fase_gioco, payload.new);
             })
             .subscribe();
         console.log("DEBUG: [GAME MODULE] Canale realtime sottoscritto:", realtimeChannel);
