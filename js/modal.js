@@ -58,9 +58,9 @@ export async function launchQuestion(catIdx, val) {
         
         const badgeElement = document.getElementById('modal-badge-source');
         if (isRealError) {
-            badgeElement.className = "text-xs px-3 py-1 bg-red-500/20 text-red-400 rounded-full font-bold uppercase border border-red-500/30";
+            badgeElement.className = "text-xs px-4 py-2 bg-red-500/20 text-red-400 rounded-full font-bold uppercase tracking-widest border-2 border-red-500/50";
         } else {
-            badgeElement.className = "text-xs px-3 py-1 bg-green-500/20 text-green-400 rounded-full font-bold uppercase border border-green-500/30";
+            badgeElement.className = "text-xs px-4 py-2 bg-green-500/20 text-green-400 rounded-full font-bold uppercase tracking-widest border-2 border-green-500/50";
         }
         
         document.getElementById('modal-question').innerText = qText;
@@ -107,7 +107,8 @@ export async function launchQuestion(catIdx, val) {
             
             document.getElementById('modal-badge-cat').innerText = category + " • €" + val;
             document.getElementById('modal-badge-source').innerText = "[GENERATO DA AI]";
-            document.getElementById('modal-badge-source').className = "text-xs px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full font-bold uppercase border border-purple-500/30";
+            document.getElementById('modal-badge-source').className = "text-xs px-4 py-2 bg-purple-500/20 text-purple-400 rounded-full font-bold uppercase tracking-widest border-2 border-purple-500/50";
+            document.getElementById('modal-badge-cat').className = "text-xs px-4 py-2 bg-blue-500/20 text-blue-400 rounded-full font-bold uppercase tracking-widest border-2 border-blue-500/50";
             
             document.getElementById('modal-question').innerText = parsed.question || parsed.q;
             document.getElementById('modal-answer').innerText = parsed.answer || parsed.a;

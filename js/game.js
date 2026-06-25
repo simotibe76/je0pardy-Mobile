@@ -37,8 +37,18 @@ export async function avviaSincronizzazioneInTempoReale(roomId, callback) {
     
     // Caricamento iniziale dei dati della stanza
     const { data, error } = await sbClient.from('stanze').select('*').eq('id', roomId).single();
+    if (error) {
+        console.error("DEBUG: [GAME MODULE] Errore caricamento stanza iniziale:", error);
+        if (callback) callback('setup');
+        return null;
+    }
+
     if (data) {
+        console.log("DEBUG: [GAME MODULE] Dati stanza iniziali caricati", data);
         aggiornaStatoLocale(data, callback);
+    } else {
+        console.warn("DEBUG: [GAME MODULE] Nessun dato stanza trovato per roomId:", roomId);
+        if (callback) callback('setup');
     }
 
     // Abbonamento al canale Realtime (Postgres Changes)
@@ -54,6 +64,7 @@ export async function avviaSincronizzazioneInTempoReale(roomId, callback) {
                 aggiornaStatoLocale(payload.new, callback);
             })
             .subscribe();
+        console.log("DEBUG: [GAME MODULE] Canale realtime sottoscritto:", realtimeChannel);
     }
     return realtimeChannel;
 }

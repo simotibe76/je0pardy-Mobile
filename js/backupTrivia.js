@@ -220,3 +220,4 @@ const BACKUP_TRIVIA = {
         ]
     }
 };
+window.BACKUP_TRIVIA = BACKUP_TRIVIA;

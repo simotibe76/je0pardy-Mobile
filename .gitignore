@@ -1,1 +1,6 @@
-chiavi.js
+# Local API keys
+js/chiavi.js
+
+# Node / environment
+node_modules/
+.DS_Store

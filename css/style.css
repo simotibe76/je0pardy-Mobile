@@ -1,8 +1,6 @@
-<style>
-        .neon-border { box-shadow: 0 0 25px rgba(250, 204, 21, 0.2); }
-        .neon-text {color: red !important;text-shadow: 0 0 25px red;
-}
-        .pulsing { animation: pulse 2s infinite; }
+    .neon-border { box-shadow: 0 0 25px rgba(250, 204, 21, 0.2); }
+    .neon-text { color: red !important; text-shadow: 0 0 25px red; }
+    .pulsing { animation: pulse 2s infinite; }
         @keyframes pulse {
             0%, 100% { transform: scale(1); opacity: 1; }
             50% { transform: scale(1.01); opacity: 0.95; }
@@ -24,4 +22,4 @@
             100% { transform: scale(1); opacity: 1; }
         }
         .animate-pop { animation: celebrate-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
-    </style>
+    

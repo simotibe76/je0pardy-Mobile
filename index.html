@@ -7,17 +7,16 @@
     <script src="chiavi.js"></script>
     <script src="js/backupTrivia.js"></script>
     <script src="js/config.js"></script>
+    <link rel="stylesheet" href="css/tailwind.css">
     <link rel="stylesheet" href="css/style.css">
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script type="module" src="js/ui.js"></script>
 </head>
 <body class="min-h-screen bg-slate-950 text-white font-sans flex flex-col justify-between select-none">
 
 <div id="app" class="flex-grow flex flex-col justify-center items-center p-4 w-full max-w-7xl mx-auto"></div>
 
 <div id="game-modal" class="fixed inset-0 bg-black/95 flex items-center justify-center p-4 hidden z-40">
-    <div class="bg-slate-900 border-4 border-blue-500 p-8 rounded-3xl max-w-2xl w-full text-center shadow-2xl relative">
+    <div class="bg-slate-900 border-4 border-blue-500 p-10 rounded-3xl max-w-3xl w-full text-center shadow-2xl relative">
         <div id="modal-loading" class="py-12">
             <div id="loading-spinner" class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-400 mx-auto mb-4"></div>
             <p id="loading-text" class="text-yellow-400 font-mono text-sm uppercase tracking-widest">Lancio della moneta 50/50...</p>
@@ -25,20 +24,20 @@
         </div>
         
         <div id="modal-content" class="hidden">
-            <div class="mb-4 flex flex-col sm:flex-row justify-center items-center gap-2">
-                <span id="modal-badge-cat" class="text-xs px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full font-bold uppercase tracking-wide border border-blue-500/30"></span>
-                <span id="modal-badge-source" class="text-xs px-3 py-1 rounded-full font-black uppercase tracking-wide"></span>
+            <div class="mb-8 flex flex-col sm:flex-row justify-center items-center gap-3">
+                <span id="modal-badge-cat" class="text-xs px-4 py-2 bg-blue-500/20 text-blue-400 rounded-full font-bold uppercase tracking-widest border-2 border-blue-500/50"></span>
+                <span id="modal-badge-source" class="text-xs px-4 py-2 rounded-full font-black uppercase tracking-widest border-2"></span>
             </div>
             
-            <h2 id="modal-question" class="text-4xl font-extrabold mt-8 mb-10 leading-relaxed text-white"></h2>
+            <h2 id="modal-question" class="text-5xl font-black mt-6 mb-10 leading-snug text-white"></h2>
             
-            <div id="debug-tracer-zone" class="mb-6 p-3 bg-black/60 rounded-xl border border-dashed border-slate-800 text-left">
-                <span class="text-[9px] font-mono uppercase text-slate-500 block font-bold">Log di Sviluppo</span>
-                <p id="debug-tracer-text" class="text-xs font-mono text-slate-300 mt-1 break-words"></p>
+            <div id="debug-tracer-zone" class="mb-8 p-4 bg-slate-950/80 rounded-xl border border-slate-700 text-left">
+                <span class="text-[10px] font-mono uppercase text-slate-500 block font-bold tracking-widest">Log di Sviluppo</span>
+                <p id="debug-tracer-text" class="text-xs font-mono text-slate-300 mt-2 break-words"></p>
             </div>
 
             <div id="modal-action-zone" class="space-y-4">
-                <button onclick="window.revealAnswer()" class="bg-yellow-500 hover:bg-yellow-400 text-black font-black py-3 px-8 rounded-xl uppercase tracking-wider transition w-full">
+                <button onclick="window.revealAnswer()" class="bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-black py-4 px-8 rounded-xl uppercase tracking-wider transition w-full text-lg">
                     Mostra Soluzione 👁️
                 </button>
             </div>
@@ -60,347 +59,6 @@
     </div>
 </div>
 
-<script>
-const app = document.getElementById('app');
-
-const SUPABASE_URL = "https://dtgitfiutlmymlgysovj.supabase.co"; 
-const SUPABASE_ANON_KEY = "sb_publishable_w688bWi3FPCUDEPHumsqPA_QAils40A";
-const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-const urlParams = new URLSearchParams(window.location.search);
-const currentRoomId = urlParams.get('room');
-let nomeGiocatoreLocale = sessionStorage.getItem("je0pardy_nome") || ""; 
-
-let players = [];
-let currentPlayerIndex = 0; 
-let gameBoardState = {}; 
-let averageAge = 40; 
-let realtimeChannel = null;
-
-const API_KEYS = typeof CONTENITORE_CHIAVI !== 'undefined' ? CONTENITORE_CHIAVI : [];
-let currentKeyIndex = 0; 
-let currentModelIndex = 0; 
-let currentActiveCell = null; 
-
-// Assicuriamoci che le configurazioni globali siano ancorate a window per i moduli esterni
-if (typeof aiCategories !== 'undefined') window.aiCategories = aiCategories;
-if (typeof valoriTabellone !== 'undefined') window.valoriTabellone = valoriTabellone;
-if (typeof DIFFICULTY_LEVELS !== 'undefined') window.DIFFICULTY_LEVELS = DIFFICULTY_LEVELS;
-if (typeof MODEL_CHAIN !== 'undefined') window.MODEL_CHAIN = MODEL_CHAIN;
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-// ==========================================
-// LOGICA CLOUD E SINCRONIZZAZIONE
-// ==========================================
-async function avviaSincronizzazioneInTempoReale() {
-    console.log("Avvio ascolto Realtime...");
-    
-    const { data, error } = await sbClient.from('stanze').select('*').eq('id', currentRoomId).single();
-    if (data) aggiornaStatoLocale(data);
-
-    if (!realtimeChannel) {
-        realtimeChannel = sbClient.channel('stanza_' + currentRoomId)
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'stanze', filter: 'id=eq.' + currentRoomId }, 
-            (payload) => { 
-                console.log("Database cambiato! Aggiorno la UI...");
-                aggiornaStatoLocale(payload.new); 
-            })
-            .subscribe();
-    }
-}
-
-function aggiornaStatoLocale(datiCloud) {
-    players = datiCloud.giocatori || [];
-    gameBoardState = datiCloud.stato_tabellone || {};
-    averageAge = datiCloud.eta_media || 40;
-    let indiceTurno = players.findIndex(p => p.name === datiCloud.turno_di);
-    currentPlayerIndex = indiceTurno !== -1 ? indiceTurno : 0;
-
-    if (datiCloud.fase_gioco === 'setup') {
-        if (typeof window.renderLobbyAttesa === 'function') {
-            window.renderLobbyAttesa(players, nomeGiocatoreLocale, currentRoomId);
-        }
-    } else if (datiCloud.fase_gioco === 'board') {
-        if (typeof window.renderGameBoard === 'function') {
-            window.renderGameBoard(players, currentPlayerIndex, gameBoardState, averageAge, nomeGiocatoreLocale);
-        }
-    }
-}
-
-async function creaNuovaStanzaCloud() {
-    const nomeInput = document.getElementById('creatore-nome').value.trim();
-    const etaInput = document.getElementById('creatore-eta').value;
-    const eta = parseInt(etaInput);
-    
-    if (!nomeInput || isNaN(eta) || eta <= 0) {
-        alert("Attenzione: devi inserire un nome valido e un'età corretta per iniziare!");
-        return;
-    }
-    
-    nomeGiocatoreLocale = nomeInput;
-    sessionStorage.setItem("je0pardy_nome", nomeInput); 
-    players = [{ name: nomeInput, score: 0, correct: 0, wrong: 0, age: eta }];
-    
-    const { data, error } = await sbClient.from('stanze').insert([{
-        stato_tabellone: {}, 
-        giocatori: players, 
-        turno_di: nomeInput, 
-        fase_gioco: 'setup',
-        eta_media: eta 
-    }]).select();
-
-    if (!error) {
-        window.location.search = `?room=${data[0].id}`;
-    } else {
-        alert("Errore durante la creazione della stanza: " + error.message);
-    }
-}
-
-async function uniscitiAStanzaCloud() {
-    const nomeInput = document.getElementById('ospite-nome').value.trim();
-    const etaInput = parseInt(document.getElementById('ospite-eta').value);
-
-    if (!nomeInput || isNaN(etaInput)) {
-        alert("Inserisci nome ed età!");
-        return;
-    }
-
-    const { data: stanzaData, error } = await sbClient
-        .from('stanze')
-        .select('giocatori')
-        .eq('id', currentRoomId)
-        .single();
-
-    if (error || !stanzaData) {
-        console.error("Errore nel recupero stanza:", error);
-        return;
-    }
-
-    let giocatoriDB = stanzaData.giocatori || [];
-    
-    if (!giocatoriDB.find(p => p.name === nomeInput)) {
-        giocatoriDB.push({ name: nomeInput, score: 0, correct: 0, wrong: 0, age: etaInput });
-        const media = Math.round(giocatoriDB.reduce((sum, p) => sum + p.age, 0) / giocatoriDB.length);
-
-        await sbClient.from('stanze').update({ 
-            giocatori: giocatoriDB,
-            eta_media: media 
-        }).eq('id', currentRoomId);
-    }
-    
-    nomeGiocatoreLocale = nomeInput;
-    sessionStorage.setItem("je0pardy_nome", nomeInput); 
-    avviaSincronizzazioneInTempoReale();
-}
-
-async function avviaPartitaCloud() {
-    await sbClient.from('stanze').update({ fase_gioco: 'board' }).eq('id', currentRoomId);
-}
-
-// ==========================================
-// LOGICA DI GIOCO E INTRECCIO AI
-// ==========================================
-async function fetchAIWithRetry(prompt, attempt = 1) {
-    if (API_KEYS.length === 0) {
-        throw new Error("Nessuna chiave trovata nel file chiavi.js.");
-    }
-    const currentModelChain = window.MODEL_CHAIN || MODEL_CHAIN;
-    const model = currentModelChain[currentModelIndex];
-    const activeKey = API_KEYS[currentKeyIndex].trim(); 
-    const statusExtra = document.getElementById('modal-status-extra');
-    
-    if (statusExtra) {
-        statusExtra.innerText = "Chiamata AI -> Modello: " + model + " | Slot Chiave: " + (currentKeyIndex + 1);
-    }
-
-    const systemInstruction = "Rispondi ESCLUSIVAMENTE con un oggetto JSON valido. Non includere blocchi di codice markdown ```json o testo extra.";
-    const pureUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`;
-
-    try {
-        const response = await fetch(pureUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                systemInstruction: { parts: [{ text: systemInstruction }] },
-                generationConfig: { responseMimeType: "application/json" }
-            })
-        });
-
-        if (response.status === 429 || response.status === 503) {
-            await sleep(300);
-            currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
-            if (attempt < 3) {
-                currentModelIndex = (currentModelIndex + 1) % currentModelChain.length;
-                return await fetchAIWithRetry(prompt, attempt + 1); 
-            }
-        }
-
-        if (!response.ok) {
-            const errorDetails = await response.text();
-            throw new Error(`Codice HTTP ${response.status} - ${errorDetails}`);
-        }
-
-        currentModelIndex = (currentModelIndex + 1) % currentModelChain.length;
-        const data = await response.json();
-        let rawText = data.candidates[0].content.parts[0].text.trim();
-        if (rawText.startsWith("```")) {
-            rawText = rawText.replace(/```json|```/g, "").trim();
-        }
-        return JSON.parse(rawText);
-
-    } catch (err) {
-        if (attempt < 3) {
-            await sleep(300);
-            currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
-            currentModelIndex = (currentModelIndex + 1) % currentModelChain.length;
-            return await fetchAIWithRetry(prompt, attempt + 1);
-        }
-        throw err;
-    }
-}
-
-async function launchQuestion(catIdx, val) {
-    const currentCategories = window.aiCategories || aiCategories;
-    const category = currentCategories[catIdx];
-    currentActiveCell = { id: catIdx + "-" + val, category: category, value: val };
-
-    document.getElementById('modal-status-extra').innerText = "";
-    document.getElementById('modal-loading').classList.remove('hidden');
-    document.getElementById('modal-content').classList.add('hidden');
-    document.getElementById('modal-resolution-zone').classList.add('hidden');
-    document.getElementById('modal-action-zone').classList.remove('hidden');
-    document.getElementById('game-modal').classList.remove('hidden');
-
-    // Modificata per supportare sia oggetti singoli che array di domande
-    function useLocalFallback(reasonMessage, badgeText, isRealError = false) {
-        let qText = "Indizio di riserva non trovato.";
-        let aText = "N/D";
-        
-        if (BACKUP_TRIVIA[category] && BACKUP_TRIVIA[category][val]) {
-            const entry = BACKUP_TRIVIA[category][val];
-            
-            if (Array.isArray(entry)) {
-                // Se c'è un array di domande, ne estrae una a caso per non ripetersi
-                const randomIdx = Math.floor(Math.random() * entry.length);
-                qText = entry[randomIdx].q;
-                aText = entry[randomIdx].a;
-            } else {
-                // Se è un oggetto singolo vecchio stile, lo usa direttamente
-                qText = entry.q;
-                aText = entry.a;
-            }
-        }
-
-        document.getElementById('modal-badge-cat').innerText = category + " • €" + val;
-        document.getElementById('modal-badge-source').innerText = badgeText;
-        
-        const badgeElement = document.getElementById('modal-badge-source');
-        badgeElement.className = isRealError 
-            ? "text-xs px-3 py-1 bg-red-500/20 text-red-400 rounded-full font-bold uppercase border border-red-500/30"
-            : "text-xs px-3 py-1 bg-green-500/20 text-green-400 rounded-full font-bold uppercase border border-green-500/30";
-        
-        document.getElementById('modal-question').innerText = qText;
-        document.getElementById('modal-answer').innerText = aText;
-        document.getElementById('debug-tracer-text').innerHTML = `Sorgente: <strong class="${isRealError ? 'text-red-400' : 'text-green-400'}">${badgeText}</strong><br>Motivo: ${reasonMessage}`;
-
-        document.getElementById('modal-loading').classList.add('hidden');
-        document.getElementById('modal-content').classList.remove('hidden');
-    }
-
-    const coinFlip = Math.random();
-
-    // SOGLIA PORTATA A 0.8: Ora l'AI si attiva l'80% delle volte (quando coinFlip è < 0.8)
-    if (coinFlip >= 0.8) {
-        await sleep(300); 
-        useLocalFallback(`La moneta (${coinFlip.toFixed(2)} >= 0.8) ha estratto l'esecuzione offline istantanea.`, "[DATABASE LOCALE]", false);
-    } else {
-        document.getElementById('loading-text').innerText = "Interrogazione API Gemini...";
-        const currentDiff = window.DIFFICULTY_LEVELS || DIFFICULTY_LEVELS;
-        const config = currentDiff[val];
-        const promptDomanda = `Sei l'autore senior del quiz Je0pardy!. Genera una singola domanda in italiano per la categoria: "${category}".\n` +
-        `Valore: €${val}. Difficoltà richiesta per la casella: livello ${config.level}/5 (${config.desc}).` +
-        `\n\nREGOLA DI BILANCIAMENTO GENERALE:\nTutte le domande devono essere tarate sulla cultura e competenze tipiche di persone con un'ETÀ MEDIA DI ${averageAge} ANNI.` +
-        `\n\nL'indizio deve essere una affermazione di massimo 12 parole. La risposta deve essere secca (1-3 parole).` +
-        `\nRispondi esclusivamente in formato JSON, senza markdown:\n` +
-        `{ "question": "Testo indizio", "answer": "Risposta" }`;
-
-        try {
-            const parsed = await fetchAIWithRetry(promptDomanda);
-            
-            document.getElementById('modal-badge-cat').innerText = category + " • €" + val;
-            document.getElementById('modal-badge-source').innerText = "[GENERATO DA AI]";
-            document.getElementById('modal-badge-source').className = "text-xs px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full font-bold uppercase border border-purple-500/30";
-            
-            document.getElementById('modal-question').innerText = parsed.question || parsed.q;
-            document.getElementById('modal-answer').innerText = parsed.answer || parsed.a;
-            document.getElementById('debug-tracer-text').innerHTML = `Sorgente: <strong class="text-purple-400">[LIVE AI VIA API]</strong><br>Motivo: Risposta generata in tempo reale con successo.`;
-
-            document.getElementById('modal-loading').classList.add('hidden');
-            document.getElementById('modal-content').classList.remove('hidden');
-
-        } catch (err) {
-            useLocalFallback(`${err.message}`, "[FALLBACK LOCALE]", true);
-        }
-    }
-}
-
-function revealAnswer() {
-    document.getElementById('modal-action-zone').classList.add('hidden');
-    document.getElementById('modal-resolution-zone').classList.remove('hidden');
-    const activePlayerName = players[currentPlayerIndex].name;
-    document.getElementById('modal-turn-prompt').innerText = "🤔 " + activePlayerName + ", risposta esatta?";
-}
-
-async function resolveTurn(isCorrect) {
-    const val = currentActiveCell.value;
-    
-    if (isCorrect) { 
-        players[currentPlayerIndex].score += val; 
-        players[currentPlayerIndex].correct++; 
-    } else { 
-        players[currentPlayerIndex].score -= val; 
-        players[currentPlayerIndex].wrong++; 
-        currentPlayerIndex = (currentPlayerIndex + 1) % players.length; 
-    }
-    gameBoardState[currentActiveCell.id] = true;
-    
-    await sbClient.from('stanze')
-        .update({ 
-            giocatori: players, 
-            stato_tabellone: gameBoardState,
-            turno_di: players[currentPlayerIndex].name
-        })
-        .eq('id', currentRoomId);
-
-    currentActiveCell = null;
-    document.getElementById('game-modal').classList.add('hidden');
-    if (typeof window.renderGameBoard === 'function') {
-        window.renderGameBoard(players, currentPlayerIndex, gameBoardState, averageAge, nomeGiocatoreLocale);
-    }
-}
-
-// Ancoraggio logiche di gioco al ciclo window per renderle chiamabili dall'esterno
-window.creaNuovaStanzaCloud = creaNuovaStanzaCloud;
-window.uniscitiAStanzaCloud = uniscitiAStanzaCloud;
-window.avviaPartitaCloud = avviaPartitaCloud;
-window.launchQuestion = launchQuestion;
-window.revealAnswer = revealAnswer;
-window.resolveTurn = resolveTurn;
-
-// ==========================================
-// AVVIO APPLICAZIONE (PUNTO DI INGRESSO)
-// ==========================================
-if (currentRoomId && nomeGiocatoreLocale) {
-    avviaSincronizzazioneInTempoReale();
-} else {
-    setTimeout(() => {
-        if (typeof window.renderSetupScreen === 'function') {
-            window.renderSetupScreen(currentRoomId, nomeGiocatoreLocale);
-        }
-    }, 100);
-}
-</script>
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>

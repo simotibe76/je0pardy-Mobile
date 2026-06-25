@@ -1,0 +1,27 @@
+{
+  "name": "je0ponline",
+  "version": "1.0.0",
+  "description": "",
+  "main": "chiavi.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simotibe76/Je0ponline.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/simotibe76/Je0ponline/issues"
+  },
+  "homepage": "https://github.com/simotibe76/Je0ponline#readme",
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.1",
+    "autoprefixer": "^10.5.2",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^4.3.1"
+  }
+}
