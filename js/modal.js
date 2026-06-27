@@ -1,147 +1,79 @@
 // js/modal.js
-import { fetchAIWithRetry } from './api.js';
 import { 
     players, 
-    currentPlayerIndex, 
-    averageAge, 
-    nomeGiocatoreLocale, 
-    setCurrentActiveCell 
+    nomeGiocatoreLocale
 } from './game.js';
 
 /**
- * Apre il modale di gioco e carica la domanda (da Gemini AI o dal database di riserva locale)
+ * Apre il modale e mostra la domanda ricevuta dallo stato della stanza.
  */
-export async function launchQuestion(catIdx, val) {
-    const categories = window.aiCategories || [];
-    const category = categories[catIdx] || "";
-    
-    // Salva la cella attualmente attiva nel modulo game
-    setCurrentActiveCell({ id: catIdx + "-" + val, category: category, value: val });
+export function launchQuestion(stanzaData) {
+    console.log("DEBUG: [MODAL] launchQuestion chiamato con:", stanzaData);
+    const questionData = stanzaData?.stato_domanda;
+    if (!questionData) return;
+
+    const { category, value, question, source } = questionData;
 
     const modal = document.getElementById('game-modal');
-    const answerText = document.getElementById('modal-answer');
-    
-    // Calcolo automatico del turno basato sullo stato live importato
-    const activePlayerName = players[currentPlayerIndex]?.name || "";
-    const isMyTurn = (activePlayerName === nomeGiocatoreLocale);
-
-    // LOGICA V1: Asimmetria Risposta (Chi gioca non la vede, gli altri sì)
-    if (isMyTurn) {
-        answerText.classList.add('hidden'); 
-    } else {
-        answerText.classList.remove('hidden'); 
-    }
-
-    // Reset visivo del modale prima del caricamento
-    const statusExtra = document.getElementById('modal-status-extra');
-    if (statusExtra) statusExtra.innerText = "";
-    
-    document.getElementById('modal-loading').classList.remove('hidden');
-    document.getElementById('modal-content').classList.add('hidden');
-    document.getElementById('modal-resolution-zone').classList.add('hidden');
-    document.getElementById('modal-action-zone').classList.remove('hidden');
     modal.classList.remove('hidden');
 
-    // Funzione interna per iniettare i dati dal file di backup offline
-    function useLocalFallback(reasonMessage, badgeText, isRealError = false) {
-        let qText = "Indizio di riserva non trovato.";
-        let aText = "N/D";
-        
-        const backupTrivia = window.BACKUP_TRIVIA || {};
-        if (backupTrivia[category] && backupTrivia[category][val]) {
-            const item = Array.isArray(backupTrivia[category][val]) ? backupTrivia[category][val][0] : backupTrivia[category][val];
-            qText = item?.q || qText;
-            aText = item?.a || aText;
-        }
+    // Mostra il contenuto, nascondi il caricamento e la risoluzione
+    document.getElementById('modal-content').classList.remove('hidden');
+    document.getElementById('modal-loading').classList.add('hidden');
+    document.getElementById('modal-resolution-zone').classList.add('hidden');
+    // Nascondi il contenitore della risposta all'avvio della domanda
+    document.getElementById('modal-answer-container').classList.add('hidden');
 
-        document.getElementById('modal-badge-cat').innerText = category + " • €" + val;
-        document.getElementById('modal-badge-source').innerText = badgeText;
-        
-        const badgeElement = document.getElementById('modal-badge-source');
-        if (isRealError) {
-            badgeElement.className = "text-xs px-4 py-2 bg-red-500/20 text-red-400 rounded-full font-bold uppercase tracking-widest border-2 border-red-500/50";
-        } else {
-            badgeElement.className = "text-xs px-4 py-2 bg-green-500/20 text-green-400 rounded-full font-bold uppercase tracking-widest border-2 border-green-500/50";
-        }
-        
-        document.getElementById('modal-question').innerText = qText;
-        document.getElementById('modal-answer').innerText = aText;
-        document.getElementById('modal-answer').classList.remove('hidden');
-        
-        const debugTracer = document.getElementById('debug-tracer-text');
-        if (debugTracer) {
-            debugTracer.innerHTML = `Sorgente: <strong class="${isRealError ? 'text-red-400' : 'text-green-400'}">${badgeText}</strong><br>Motivo: ${reasonMessage}`;
-        }
+    // Popola i dati della domanda
+    document.getElementById('modal-badge-cat').innerText = `${category} • €${value}`;
+    const sourceBadge = document.getElementById('modal-badge-source');
+    sourceBadge.innerText = `[${source}]`;
+    sourceBadge.className = `text-xs px-4 py-2 rounded-full font-bold uppercase tracking-widest border-2 ${
+        source === 'GENERATO DA AI' 
+        ? 'bg-purple-500/20 text-purple-400 border-purple-500/50' 
+        : 'bg-green-500/20 text-green-400 border-green-500/50'
+    }`;
+    document.getElementById('modal-question').innerText = question;
 
-        document.getElementById('modal-loading').classList.add('hidden');
-        document.getElementById('modal-content').classList.remove('hidden');
-    }
-
-    // Coin-flip 50/50 per alternare bilanciamento online/offline
-    const coinFlip = Math.random();
-
-    if (coinFlip >= 0.5) {
-        setTimeout(() => {
-            useLocalFallback(`La moneta (Moneta >= 0.5) ha estratto l'esecuzione offline istantanea.`, "[DATABASE LOCALE]", false);
-        }, 300);
+    // Logica per il Master: solo lui vede il pulsante per rivelare la risposta
+    const isMaster = players.length > 0 && players[0].name === nomeGiocatoreLocale;
+    if (isMaster) {
+        document.getElementById('modal-action-zone').classList.remove('hidden');
+        // Corregge l'azione del pulsante per chiamare la funzione corretta
+        document.querySelector('#modal-action-zone button').setAttribute('onclick', 'window.revealAnswerToAll()');
+        document.getElementById('modal-waiting-for-reveal').classList.add('hidden');
     } else {
-        const loadingText = document.getElementById('loading-text');
-        if (loadingText) loadingText.innerText = "Interrogazione API Gemini...";
-
-        const difficultyLevels = window.DIFFICULTY_LEVELS || {
-            100: { level: 1, desc: "Facile" },
-            200: { level: 2, desc: "Medio-Facile" },
-            300: { level: 3, desc: "Intermedio" },
-            400: { level: 4, desc: "Difficile" },
-            500: { level: 5, desc: "Esperto" }
-        };
-        const config = difficultyLevels[val] || { level: 3, desc: "Standard" };
-        
-        const promptDomanda = "Sei l'autore senior del quiz Je0pardy!. Genera una singola domanda in italiano per la categoria: \"" + category + "\".\n" +
-        "Valore: €" + val + ". Difficoltà richiesta per la casella: livello " + config.level + "/5 (" + config.desc + ")." +
-        "\n\nREGOLA DI BILANCIAMENTO GENERALE:\nTutte le domande devono essere tarate sulla cultura e competenze tipiche di persone con un'ETÀ MEDIA DI " + averageAge + " ANNI." +
-        "\n\nL'indizio deve essere una affermazione di massimo 12 parole. La risposta deve essere secca (1-3 parole)." +
-        "\nRispondi esclusivamente in formato JSON, senza markdown:\n" +
-        "{ \"question\": \"Testo indizio\", \"answer\": \"Risposta\" }";
-
-        try {
-            const parsed = await fetchAIWithRetry(promptDomanda);
-            
-            document.getElementById('modal-badge-cat').innerText = category + " • €" + val;
-            document.getElementById('modal-badge-source').innerText = "[GENERATO DA AI]";
-            document.getElementById('modal-badge-source').className = "text-xs px-4 py-2 bg-purple-500/20 text-purple-400 rounded-full font-bold uppercase tracking-widest border-2 border-purple-500/50";
-            document.getElementById('modal-badge-cat').className = "text-xs px-4 py-2 bg-blue-500/20 text-blue-400 rounded-full font-bold uppercase tracking-widest border-2 border-blue-500/50";
-            
-            document.getElementById('modal-question').innerText = parsed.question || parsed.q;
-            document.getElementById('modal-answer').innerText = parsed.answer || parsed.a;
-            document.getElementById('modal-answer').classList.remove('hidden');
-            
-            const debugTracer = document.getElementById('debug-tracer-text');
-            if (debugTracer) {
-                debugTracer.innerHTML = `Sorgente: <strong class="text-purple-400">[LIVE AI VIA API]</strong><br>Motivo: Risposta generata in tempo reale dai server remoti con successo.`;
-            }
-
-            document.getElementById('modal-loading').classList.add('hidden');
-            document.getElementById('modal-content').classList.remove('hidden');
-
-        } catch (err) {
-            useLocalFallback(`${err.message}`, "[FALLBACK LOCALE]", true);
-        }
+        document.getElementById('modal-action-zone').classList.add('hidden');
+        document.getElementById('modal-waiting-for-reveal').classList.remove('hidden');
     }
 }
 
 /**
- * Rivela la risposta esatta e mostra i bottoni di convalida (Sì/No) per il turno corrente
+ * Rivela la risposta e mostra i pulsanti di validazione al Master.
  */
-export function revealAnswer() {
-    document.getElementById('modal-action-zone').classList.add('hidden');
-    document.getElementById('modal-resolution-zone').classList.remove('hidden');
-    document.getElementById('modal-answer').classList.remove('hidden');
+export function revealAnswer(stanzaData) {
+    console.log("DEBUG: [MODAL] revealAnswer chiamato con:", stanzaData);
+    const questionData = stanzaData?.stato_domanda;
+    if (!questionData) return;
     
-    const activePlayerName = players[currentPlayerIndex]?.name || "Giocatore";
-    document.getElementById('modal-turn-prompt').innerText = "🤔 " + activePlayerName + ", risposta esatta?";
-}
+    // Nascondi la zona "Mostra Soluzione" e il messaggio di attesa
+    document.getElementById('modal-action-zone').classList.add('hidden');
+    document.getElementById('modal-waiting-for-reveal').classList.add('hidden');
+    
+    // Popola e mostra la risposta a TUTTI
+    document.getElementById('modal-answer-container').classList.remove('hidden');
+    document.getElementById('modal-answer').innerText = questionData.answer;
+    
+    // Logica per il Master: solo lui vede i pulsanti per giudicare
+    const isMaster = players.length > 0 && players[0].name === nomeGiocatoreLocale;
+    const activePlayerName = stanzaData.turno_di || "Giocatore";
+    document.getElementById('modal-turn-prompt').innerText = `🤔 ${activePlayerName}, risposta esatta?`;
 
-// Esposizione globale per mantenere compatibili le chiamate inline onclick nell'HTML
-window.launchQuestion = launchQuestion;
-window.revealAnswer = revealAnswer;
+    if (isMaster) {
+        document.getElementById('modal-resolution-zone').classList.remove('hidden');
+        document.getElementById('modal-waiting-for-master').classList.add('hidden');
+    } else {
+        document.getElementById('modal-resolution-zone').classList.add('hidden');
+        document.getElementById('modal-waiting-for-master').classList.remove('hidden');
+    }
+}

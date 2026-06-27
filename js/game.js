@@ -1,5 +1,4 @@
-// js/game.js
-import { sbClient } from './api.js';
+import { sbClient, fetchAIWithRetry } from './api.js';
 
 // ==========================================
 // STATO GLOBALE DEL GIOCO (Esportato per gli altri moduli)
@@ -152,29 +151,131 @@ export async function avviaPartitaCloud() {
 }
 
 export async function resolveTurn(isCorrect) {
-    if (!currentActiveCell) return;
-    const val = currentActiveCell.value;
-    
-    if (isCorrect) { 
-        players[currentPlayerIndex].score += val; 
-        players[currentPlayerIndex].correct++; 
-    } else { 
-        players[currentPlayerIndex].score -= val; 
-        players[currentPlayerIndex].wrong++; 
-        currentPlayerIndex = (currentPlayerIndex + 1) % players.length; 
+    console.log(`DEBUG: [GAME] resolveTurn chiamato con isCorrect: ${isCorrect}`);
+    if (!currentActiveCell) {
+        console.error("resolveTurn chiamato senza una cella attiva.");
+        return;
     }
-    gameBoardState[currentActiveCell.id] = true;
-    
+    const val = currentActiveCell.value;
+
+    const { data: stanza, error } = await sbClient
+        .from('stanze')
+        .select('giocatori, stato_tabellone, turno_di')
+        .eq('id', currentRoomId)
+        .single();
+
+    if (error) {
+        console.error("Errore nel recuperare lo stato della stanza in resolveTurn:", error);
+        return;
+    }
+
+    let playersDB = stanza.giocatori || [];
+    let boardDB = stanza.stato_tabellone || {};
+    let turnoAttuale = stanza.turno_di;
+
+    let playerIndex = playersDB.findIndex(p => p.name === turnoAttuale);
+    if (playerIndex === -1) {
+        console.error("Giocatore di turno non trovato:", turnoAttuale);
+        return;
+    }
+
+    if (isCorrect) {
+        playersDB[playerIndex].score += val;
+        playersDB[playerIndex].correct++;
+    } else {
+        playersDB[playerIndex].score -= val;
+        playersDB[playerIndex].wrong++;
+        playerIndex = (playerIndex + 1) % playersDB.length;
+        turnoAttuale = playersDB[playerIndex].name;
+    }
+
+    boardDB[currentActiveCell.id] = true;
+
     await sbClient.from('stanze')
-        .update({ 
-            giocatori: players, 
-            stato_tabellone: gameBoardState,
-            turno_di: players[currentPlayerIndex].name 
+        .update({
+            giocatori: playersDB,
+            stato_tabellone: boardDB,
+            turno_di: turnoAttuale,
+            fase_gioco: 'board',
+            stato_domanda: null
         })
         .eq('id', currentRoomId);
+}
 
-    currentActiveCell = null;
-    document.getElementById('game-modal').classList.add('hidden');
+/**
+ * [NUOVO] Chiamata quando il giocatore di turno seleziona una casella.
+ * Genera la domanda e aggiorna lo stato della stanza su Supabase.
+ */
+export async function selectQuestion(catIdx, val) {
+    console.log(`DEBUG: [GAME] selectQuestion triggered for catIdx: ${catIdx}, val: ${val}`);
+    
+    const { data: stanza, error } = await sbClient.from('stanze').select('eta_media').eq('id', currentRoomId).single();
+    if (error) { console.error("Impossibile leggere lo stato della stanza:", error); return; }
+
+    const categories = window.aiCategories || [];
+    const category = categories[catIdx] || "";
+    
+    // Imposta la cella attiva per la risoluzione successiva
+    setCurrentActiveCell({ id: catIdx + "-" + val, category: category, value: val });
+
+    let questionData = {
+        question: "Errore di generazione",
+        answer: "N/D",
+        source: "Error",
+        category: category,
+        value: val
+    };
+
+    // Funzione interna per usare il backup
+    function useLocalFallback() {
+        const backupTrivia = window.BACKUP_TRIVIA || {};
+        if (backupTrivia[category] && backupTrivia[category][val]) {
+            const item = Array.isArray(backupTrivia[category][val]) ? backupTrivia[category][val][0] : backupTrivia[category][val];
+            questionData.question = item.q;
+            questionData.answer = item.a;
+            questionData.source = "DATABASE LOCALE";
+        }
+    }
+
+    // Coin-flip 50/50 per usare AI o backup
+    if (Math.random() >= 0.5) {
+        useLocalFallback();
+    } else {
+        try {
+            const difficultyLevels = window.DIFFICULTY_LEVELS || {};
+            const config = difficultyLevels[val] || { level: 3, desc: "Standard" };
+            const promptDomanda = `Sei l'autore senior del quiz Je0pardy!. Genera una singola domanda in italiano per la categoria: "${category}".
+Valore: €${val}. Difficoltà richiesta: livello ${config.level}/5 (${config.desc}).
+Tieni conto di un'età media dei partecipanti di ${stanza.eta_media} anni.
+L'indizio deve essere una affermazione (max 12 parole). La risposta deve essere secca (1-3 parole).
+Rispondi esclusivamente in formato JSON, senza markdown: { "question": "Testo indizio", "answer": "Risposta" }`;
+
+            const parsed = await fetchAIWithRetry(promptDomanda);
+            questionData.question = parsed.question || parsed.q;
+            questionData.answer = parsed.answer || parsed.a;
+            questionData.source = "GENERATO DA AI";
+        } catch (err) {
+            console.error("Errore API, uso fallback:", err);
+            useLocalFallback();
+            questionData.source = "FALLBACK LOCALE";
+        }
+    }
+
+    // Aggiorna lo stato della stanza nel DB, cambiando la fase a 'question'
+    await sbClient.from('stanze').update({
+        fase_gioco: 'question',
+        stato_domanda: questionData
+    }).eq('id', currentRoomId);
+}
+
+/**
+ * [NUOVO] Chiamata dal Master per rivelare la risposta a tutti.
+ */
+export async function revealAnswerToAll() {
+    console.log("DEBUG: [GAME] revealAnswerToAll triggered. Changing phase to 'reveal'.");
+    await sbClient.from('stanze').update({
+        fase_gioco: 'reveal'
+    }).eq('id', currentRoomId);
 }
 
 // Exponiamo le funzioni a livello globale (window) per non rompere gli "onclick" presenti nei bottoni dell'HTML
@@ -182,3 +283,5 @@ window.creaNuovaStanzaCloud = creaNuovaStanzaCloud;
 window.uniscitiAStanzaCloud = uniscitiAStanzaCloud;
 window.avviaPartitaCloud = avviaPartitaCloud;
 window.resolveTurn = resolveTurn;
+window.selectQuestion = selectQuestion;
+window.revealAnswerToAll = revealAnswerToAll;

@@ -1,10 +1,8 @@
-# Local API keys
-js/chiavi.js
-
-# Node / environment
+# Cartella delle dipendenze di Node.js
 node_modules/
-.DS_Store
 
-# Local screenshots and temporary images
-*Screenshot*.png
-*Schermata*.png
+# File contenente le chiavi API segrete
+chiavi.js
+
+# Impostazioni dell'editor di codice
+.vscode/

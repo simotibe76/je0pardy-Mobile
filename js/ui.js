@@ -62,7 +62,7 @@ export function renderLobbyAttesa(players, nomeGiocatoreLocale, currentRoomId) {
 /**
  * Disegna il tabellone principale di gioco a 10 colonne (Categorie + Celle Valori)
  */
-export function renderGameBoard(players, currentPlayerIndex, gameBoardState, averageAge, nomeGiocatoreLocale) {
+export function renderGameBoard(players, gameBoardState, averageAge, nomeGiocatoreLocale, turnoDi) {
     const app = document.getElementById('app');
     const aiCategories = Array.isArray(window.aiCategories) ? window.aiCategories : [];
     const valoriTabellone = Array.isArray(window.valoriTabellone) ? window.valoriTabellone : [];
@@ -71,7 +71,7 @@ export function renderGameBoard(players, currentPlayerIndex, gameBoardState, ave
     
     const numeroTotaleCelle = aiCategories.length * valoriTabellone.length;
     const celleCompletate = Object.keys(gameBoardState).length;
-    const isMyTurn = (players[currentPlayerIndex]?.name === nomeGiocatoreLocale);
+    const isMyTurn = (turnoDi === nomeGiocatoreLocale);
 
     // Se il tabellone è esaurito, dirotta automaticamente sulla schermata di fine partita
     if (celleCompletate >= numeroTotaleCelle && numeroTotaleCelle > 0) {
@@ -81,8 +81,8 @@ export function renderGameBoard(players, currentPlayerIndex, gameBoardState, ave
 
     // Sezione dei punteggi dei giocatori
     let playersHtml = players.map((p, idx) => `
-        <div class="flex flex-col items-center p-4 rounded-2xl border-3 transition-all ${idx === currentPlayerIndex ? 'border-yellow-400 bg-slate-800' : 'border-slate-700 bg-slate-900'}">
-            <span class="text-xs font-bold uppercase tracking-wider ${idx === currentPlayerIndex ? 'text-yellow-400' : 'text-slate-400'}">${p.name}</span>
+        <div class="flex flex-col items-center p-4 rounded-2xl border-3 transition-all ${p.name === turnoDi ?'border-yellow-400 bg-slate-800' : 'border-slate-700 bg-slate-900'}">
+            <span class="text-xs font-bold uppercase tracking-wider ${p.name === turnoDi ?'text-yellow-400' : 'text-slate-400'}">${p.name}</span>
             <span class="text-3xl font-black mt-2 ${p.score >= 0 ? 'text-green-400' : 'text-red-400'}">${p.score} €</span>
         </div>
     `).join('');
@@ -113,7 +113,7 @@ export function renderGameBoard(players, currentPlayerIndex, gameBoardState, ave
                 } else {
                     // Cella interattiva sbloccata (Tuo Turno)
                     gridCells += `
-                    <button onclick="window.launchQuestion(${catIdx}, ${val})" class="bg-slate-800 border-2 border-blue-500/60 hover:bg-blue-600 hover:text-white hover:border-blue-400 text-yellow-400 font-black text-2xl tracking-wide transition duration-150 flex items-center justify-center min-h-[70px]">
+                    <button onclick="window.selectQuestion(${catIdx}, ${val})" class="bg-slate-800 border-2 border-blue-500/60 hover:bg-blue-600 hover:text-white hover:border-blue-400 text-yellow-400 font-black text-2xl tracking-wide transition duration-150 flex items-center justify-center min-h-[70px]">
                         ${val}€
                     </button>`;
                 }
