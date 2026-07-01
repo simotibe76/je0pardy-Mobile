@@ -6,29 +6,46 @@ export const sbClient = supabase.createClient(
     "sb_publishable_w688bWi3FPCUDEPHumsqPA_QAils40A"
 );
 
-// Configurazione interna delle chiavi recuperate da chiavi.js
-const API_KEYS = typeof CONTENITORE_CHIAVI !== 'undefined' ? CONTENITORE_CHIAVI : [];
-let currentKeyIndex = 0;
-let currentModelIndex = 0;
-
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-/**
- * Interroga l'API di Gemini gestendo in modo trasparente errori,
- * rotazione automatica delle chiavi e cambio di modello (fallback chain).
- */
-export async function fetchAIWithRetry(prompt, attempt = 1) {
-    if (API_KEYS.length === 0) {
-        throw new Error("Nessuna chiave trovata nel file chiavi.js. Verifica il setup!");
+async function callGeminiProxy(prompt) {
+    const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+    });
+
+    if (!response.ok) {
+        const errorDetails = await response.text();
+        throw new Error(`Proxy Gemini error ${response.status}: ${errorDetails}`);
     }
-    
-    // Recupera la catena dei modelli configurata (fallback su array locale se non definita)
-    const modelChain = window.MODEL_CHAIN || ["gemini-2.5-flash", "gemini-2.0-flash"];
-    const model = modelChain[currentModelIndex % modelChain.length];
-    const activeKey = API_KEYS[currentKeyIndex].trim(); 
-    
-    const systemInstruction = "Rispondi ESCLUSIVAMENTE con un oggetto JSON valido. Non includere blocchi di codice markdown ```json o testo extra.";
-    const pureUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`;
+
+    return response.json();
+}
+
+export async function fetchAIWithRetry(prompt, attempt = 1) {
+    try {
+        const data = await callGeminiProxy(prompt);
+        let rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+        if (!rawText) {
+            throw new Error('Risposta Gemini non valida');
+        }
+
+        if (rawText.startsWith('```')) {
+            rawText = rawText.replace(/```json|```/g, '').trim();
+        }
+
+        return JSON.parse(rawText);
+    } catch (err) {
+        if (attempt < 3) {
+            await sleep(300);
+            return fetchAIWithRetry(prompt, attempt + 1);
+        }
+        console.error(`Tentativo ${attempt} fallito:`, err);
+        throw err;
+    }
+}
 
     try {
         const response = await fetch(pureUrl, {
