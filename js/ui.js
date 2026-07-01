@@ -35,6 +35,20 @@ export function renderLobbyAttesa(players, nomeGiocatoreLocale, currentRoomId) {
     players = Array.isArray(players) ? players : [];
     const isCreatore = players.length > 0 && players[0].name === nomeGiocatoreLocale;
     
+    const qrCodeHtml = isCreatore ? `
+        <div class="mt-8 p-6 bg-slate-950 rounded-xl border border-slate-800">
+            <p class="text-sm text-slate-400 mb-4 uppercase tracking-widest font-bold">Invita Amici</p>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-6">
+                <div id="qrcode-container" class="p-2 bg-white rounded-lg shadow-lg"></div>
+                <div class="text-center sm:text-left">
+                    <p class="text-slate-300 font-bold">Scansiona il QR Code</p>
+                    <p class="text-slate-500 text-sm">o condividi l'ID della stanza:</p>
+                    <p class="text-yellow-400 font-mono text-lg mt-1 select-all">${currentRoomId}</p>
+                </div>
+            </div>
+        </div>
+    ` : '';
+
     const giocatoriHtml = players.map((p, idx) => `
         <span class="px-6 py-3 bg-transparent border-2 ${idx === 0 ? 'border-yellow-400 text-yellow-400' : 'bg-slate-800 border-slate-700 text-slate-300'} rounded-full text-sm font-bold m-2 inline-block">
             ${p.name}
@@ -51,12 +65,27 @@ export function renderLobbyAttesa(players, nomeGiocatoreLocale, currentRoomId) {
             <div class="flex flex-wrap justify-center gap-3">${giocatoriHtml}</div>
         </div>
 
+        ${qrCodeHtml}
+
         ${isCreatore ? 
-            `<button onclick="window.avviaPartitaCloud()" class="w-full bg-yellow-400 hover:bg-yellow-300 text-slate-900 p-5 rounded-xl font-black uppercase transition text-lg tracking-wide shadow-lg">🚀 Inizia Partita</button>` 
+            `<button onclick="window.avviaPartitaCloud()" class="w-full mt-8 bg-yellow-400 hover:bg-yellow-300 text-slate-900 p-5 rounded-xl font-black uppercase transition text-lg tracking-wide shadow-lg">🚀 Inizia Partita</button>` 
             : 
             `<div class="p-5 rounded-xl border-2 border-green-400/50 bg-green-400/10 text-green-400 font-bold uppercase tracking-wide">In attesa che il creatore avvii la partita... ⏳</div>`
         }
     </div>`;
+
+    // Se l'utente è il creatore, genera il QR code
+    if (isCreatore) {
+        const qrcodeContainer = document.getElementById('qrcode-container');
+        // Controlla che la libreria sia stata caricata prima di usarla
+        if (qrcodeContainer && typeof QRCode !== 'undefined') {
+            new QRCode(qrcodeContainer, {
+                text: window.location.href,
+                width: 128,
+                height: 128
+            });
+        }
+    }
 }
 
 /**
