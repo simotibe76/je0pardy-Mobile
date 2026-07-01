@@ -1,4 +1,5 @@
 import { sbClient, fetchAIWithRetry } from './api.js';
+import { showLoadingModal } from './modal.js';
 
 // ==========================================
 // STATO GLOBALE DEL GIOCO (Esportato per gli altri moduli)
@@ -208,6 +209,9 @@ export async function resolveTurn(isCorrect) {
  */
 export async function selectQuestion(catIdx, val) {
     console.log(`DEBUG: [GAME] selectQuestion triggered for catIdx: ${catIdx}, val: ${val}`);
+    
+    // [MIGLIORAMENTO UX] Mostra immediatamente il modale di caricamento
+    showLoadingModal("Lancio della moneta 50/50 per la fonte della domanda...");
     
     const { data: stanza, error } = await sbClient.from('stanze').select('eta_media').eq('id', currentRoomId).single();
     if (error) { console.error("Impossibile leggere lo stato della stanza:", error); return; }

@@ -27,11 +27,6 @@ export async function fetchAIWithRetry(prompt, attempt = 1) {
     const model = modelChain[currentModelIndex % modelChain.length];
     const activeKey = API_KEYS[currentKeyIndex].trim(); 
     
-    const statusExtra = document.getElementById('modal-status-extra');
-    if (statusExtra) {
-        statusExtra.innerText = "Chiamata AI -> Modello: " + model + " | Slot Chiave: " + (currentKeyIndex + 1);
-    }
-
     const systemInstruction = "Rispondi ESCLUSIVAMENTE con un oggetto JSON valido. Non includere blocchi di codice markdown ```json o testo extra.";
     const pureUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`;
 

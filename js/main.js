@@ -29,10 +29,10 @@ window.addEventListener('DOMContentLoaded', () => {
             } else if (fase === 'question') {
                 // Nascondi il tabellone e mostra la domanda a tutti
                 document.getElementById('app').innerHTML = '';
-                modals.launchQuestion(stanzaData);
+                modals.launchQuestion(stanzaData, players, nome);
             } else if (fase === 'reveal') {
                 // Non pulire la UI (il modale è già aperto), mostra solo la risposta
-                modals.revealAnswer(stanzaData);
+                modals.revealAnswer(stanzaData, players, nome);
             } else {
                 renderLobbyAttesa(players, nomeGiocatoreLocale, roomId);
             }

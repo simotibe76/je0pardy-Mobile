@@ -1,13 +1,30 @@
 // js/modal.js
-import { 
-    players, 
-    nomeGiocatoreLocale
-} from './game.js';
+
+/**
+ * [NUOVO] Mostra il modale in stato di caricamento.
+ * Utile per dare un feedback immediato all'utente prima di operazioni lunghe.
+ */
+export function showLoadingModal(message = "Generazione domanda in corso...") {
+    const modal = document.getElementById('game-modal');
+    modal.classList.remove('hidden');
+
+    // Mostra il caricamento, nascondi il contenuto principale
+    document.getElementById('modal-loading').classList.remove('hidden');
+    document.getElementById('modal-content').classList.add('hidden');
+    
+    // Aggiorna il testo del caricamento
+    const loadingText = document.getElementById('loading-text');
+    if(loadingText) loadingText.innerText = message;
+
+    // Pulisci il testo di stato extra
+    const statusExtra = document.getElementById('modal-status-extra');
+    if (statusExtra) statusExtra.innerText = '';
+}
 
 /**
  * Apre il modale e mostra la domanda ricevuta dallo stato della stanza.
  */
-export function launchQuestion(stanzaData) {
+export function launchQuestion(stanzaData, players, nomeGiocatoreLocale) {
     console.log("DEBUG: [MODAL] launchQuestion chiamato con:", stanzaData);
     const questionData = stanzaData?.stato_domanda;
     if (!questionData) return;
@@ -51,7 +68,7 @@ export function launchQuestion(stanzaData) {
 /**
  * Rivela la risposta e mostra i pulsanti di validazione al Master.
  */
-export function revealAnswer(stanzaData) {
+export function revealAnswer(stanzaData, players, nomeGiocatoreLocale) {
     console.log("DEBUG: [MODAL] revealAnswer chiamato con:", stanzaData);
     const questionData = stanzaData?.stato_domanda;
     if (!questionData) return;
