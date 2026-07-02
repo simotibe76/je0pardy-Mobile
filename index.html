@@ -15,7 +15,7 @@
 <div id="app" class="flex-grow flex flex-col justify-center items-center p-4 w-full max-w-7xl mx-auto"></div>
 
 <div id="game-modal" class="fixed inset-0 bg-black/95 flex items-center justify-center p-4 hidden z-40">
-    <div class="bg-slate-900 border-4 border-blue-500 p-10 rounded-3xl max-w-3xl w-full text-center shadow-2xl relative">
+    <div class="bg-slate-900 border-4 border-blue-500 p-6 sm:p-10 rounded-3xl max-w-3xl w-full text-center shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <div id="modal-loading" class="py-12">
             <div id="loading-spinner" class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-400 mx-auto mb-4"></div>
             <p id="loading-text" class="text-yellow-400 font-mono text-sm uppercase tracking-widest">Lancio della moneta 50/50...</p>
@@ -28,7 +28,7 @@
                 <span id="modal-badge-source" class="text-xs px-4 py-2 rounded-full font-black uppercase tracking-widest border-2"></span>
             </div>
             
-            <h2 id="modal-question" class="text-5xl font-black mt-6 mb-10 leading-snug text-white"></h2>
+            <h2 id="modal-question" class="text-2xl sm:text-4xl lg:text-5xl font-black mt-4 sm:mt-6 mb-6 sm:mb-10 leading-snug text-white"></h2>
             
             <!-- Zona Risposta (visibile a tutti durante la fase 'reveal') -->
             <div id="modal-answer-container" class="hidden bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6">
